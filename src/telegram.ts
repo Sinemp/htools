@@ -112,13 +112,16 @@ export function buildTelegramPreviewMarkdown(
   const labels = locale === "zh"
     ? { article: "文章地址", project: "项目地址", demo: "演示地址" }
     : { article: "Article", project: "Project", demo: "Demo" };
-  const tags = resource.tags.map(toTelegramHashtag).filter(Boolean).join(" ");
+  const editableBody = bodyMarkdown.trim();
+  const tags = resource.type === "custom"
+    ? ""
+    : resource.tags.map(toTelegramHashtag).filter(Boolean).join(" ");
   const linkLabel = resource.type === "article" ? labels.article : labels.project;
 
   return [
-    bodyMarkdown.trim(),
-    resource.url ? `${linkLabel}：${resource.url}` : "",
-    resource.demoUrl ? `${labels.demo}：${resource.demoUrl}` : "",
+    editableBody,
+    resource.url ? `${linkLabel}：[${resource.url}](${resource.url})` : "",
+    resource.demoUrl ? `${labels.demo}：[${resource.demoUrl}](${resource.demoUrl})` : "",
     tags,
     footerMarkdown.trim()
   ].filter(Boolean).join(TELEGRAM_SECTION_SEPARATOR);
@@ -136,10 +139,18 @@ export function countTelegramMessageCharacters(value: string) {
   return Array.from(value).length;
 }
 
+export function escapeTelegramPreviewHashtags(value: string) {
+  return value.replace(
+    /(^|\n)([ \t]*)(#[^\s#]+(?:[ \t]+#[^\s#]+)*)(?=\n|$)/g,
+    (_match, lineStart: string, indentation: string, hashtags: string) =>
+      `${lineStart}${indentation}\\${hashtags}`
+  );
+}
+
 export function getTelegramText(locale: Locale) {
   return locale === "zh"
     ? {
-      action: "Telegram 推送",
+      action: "消息推送",
       title: "Telegram 推送",
       management: {
         nav: "消息推送",
@@ -148,17 +159,13 @@ export function getTelegramText(locale: Locale) {
         typeCustom: "手动添加",
         searchPlaceholder: "搜索推送内容...",
         filterAll: "全部",
-        filterTools: "工具",
-        filterArticles: "文章",
         typeTool: "工具库",
         typeArticle: "文章管理",
         statusPushed: "已推送",
-        statusNotPushed: "未推送",
         pushAction: "推送到 Telegram",
         pushConfirmTitle: "推送到 Telegram？",
         pushConfirmDescription: "发出后仍可以继续编辑内容并更新到同一条消息，但无法退回草稿状态。",
         resourceDeleted: "原内容已删除",
-        linkUnavailable: "没有关联地址",
         emptyTitle: "还没有推送",
         emptyDescription: "自己写一条消息推送到 Telegram，或者从工具库、文章管理卡片推送",
         noMatchTitle: "没有匹配的推送",
@@ -183,7 +190,9 @@ export function getTelegramText(locale: Locale) {
           modeLabel: "推送方式",
           sendLabel: "直接推送",
           draftLabel: "存为草稿",
-          goManage: "去消息推送"
+          sendAction: "消息推送",
+          draftAction: "保存草稿",
+          goManage: "消息推送"
         },
       description: "编辑当前内容的 Telegram 推送信息，固定消息尾巴由系统自动附加。",
         customDescription: "自己写一条推送发到 Telegram，不绑定工具或文章；固定消息尾巴由系统自动附加。",
@@ -200,7 +209,7 @@ export function getTelegramText(locale: Locale) {
         recoverMessage: "重新建立推送",
         recovered: "旧消息记录已清除，请手动重新推送。",
         bodyLabel: "Markdown 正文",
-        restoreDefault: "恢复",
+        restoreDefault: "恢复默认",
         previewTitle: "消息预览",
         mediaLabel: "推送图片",
         mediaEnabled: "开启图片",
@@ -209,10 +218,9 @@ export function getTelegramText(locale: Locale) {
         mediaUrlPlaceholder: "https://example.com/preview.png",
         mediaHelp: "开启后使用当前内容的预览图，可替换为其他公开图片地址。",
         mediaInvalid: "发送图片时请填写有效的图片地址。",
-        fixedContent: "自动附加内容",
-        save: "保存",
-        send: "推送",
-        update: "更新",
+        save: "保存内容",
+        send: "消息推送",
+        update: "更新推送",
         saved: "Telegram 推送内容已保存。",
         restored: "已恢复默认正文和图片设置。",
         sent: "已推送到 Telegram。",
@@ -221,7 +229,7 @@ export function getTelegramText(locale: Locale) {
         tooLong: "完整消息超过 Telegram 的 4096 字符限制。"
       }
     : {
-        action: "Telegram Push",
+        action: "Message Push",
         title: "Telegram Push",
         management: {
           nav: "Message Push",
@@ -230,17 +238,13 @@ export function getTelegramText(locale: Locale) {
           typeCustom: "Manual",
           searchPlaceholder: "Search pushes...",
           filterAll: "All",
-          filterTools: "Tools",
-          filterArticles: "Articles",
           typeTool: "Tool Library",
           typeArticle: "Articles",
           statusPushed: "Pushed",
-          statusNotPushed: "Not pushed",
           pushAction: "Push to Telegram",
           pushConfirmTitle: "Push to Telegram?",
           pushConfirmDescription: "After sending you can still edit the content and update the same message, but it cannot go back to draft.",
           resourceDeleted: "Original content deleted",
-          linkUnavailable: "No linked address",
           emptyTitle: "No pushes yet",
           emptyDescription: "Write a message and push it to Telegram, or push from a Tool Library or Articles card.",
           noMatchTitle: "No matching pushes",
@@ -265,7 +269,9 @@ export function getTelegramText(locale: Locale) {
           modeLabel: "Push mode",
           sendLabel: "Push now",
           draftLabel: "Save draft",
-          goManage: "Open Message Push"
+          sendAction: "Push Message",
+          draftAction: "Save Draft",
+          goManage: "Message Push"
         },
         description: "Edit the current Telegram message; the fixed message footer is appended automatically.",
         customDescription: "Write a standalone Telegram push that is not tied to a tool or article. The fixed message footer is appended automatically.",
@@ -282,7 +288,7 @@ export function getTelegramText(locale: Locale) {
         recoverMessage: "Rebuild Push",
         recovered: "The old message record was cleared. Push the content manually again.",
         bodyLabel: "Markdown content",
-        restoreDefault: "Reset",
+        restoreDefault: "Reset Default",
         previewTitle: "Message preview",
         mediaLabel: "Push image",
         mediaEnabled: "Enable image",
@@ -291,10 +297,9 @@ export function getTelegramText(locale: Locale) {
         mediaUrlPlaceholder: "https://example.com/preview.png",
         mediaHelp: "When enabled, uses the current item's preview image; replace it with another public image URL if needed.",
         mediaInvalid: "Enter a valid image URL when image sending is enabled.",
-        fixedContent: "Automatically appended",
-        save: "Save",
-        send: "Push",
-        update: "Update",
+        save: "Save Content",
+        send: "Push Message",
+        update: "Update Push",
         saved: "Telegram push content saved.",
         restored: "Default content and image settings restored.",
         sent: "Pushed to the Telegram chat.",

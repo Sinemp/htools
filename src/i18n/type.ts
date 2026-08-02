@@ -31,7 +31,7 @@ export type Messages = {
     latestTools: string;
     latestArticles: string;
     moreTools: string;
-    morePosts: string;
+    moreArticles: string;
     footerDescription: string;
     footerProduct: string;
     footerSupport: string;

@@ -4,6 +4,10 @@ import {
   useRef,
   useState
 } from "react";
+import {
+  isEventInsideElement,
+  useOutsideInteractionDismiss
+} from "./useOutsideInteractionDismiss";
 
 export function useUtilityMenuKeyboard<Menu extends string>(scope: string) {
   const [openMenu, setOpenMenu] = useState<Menu | null>(null);
@@ -125,33 +129,23 @@ export function useUtilityMenuKeyboard<Menu extends string>(scope: string) {
     return () => window.cancelAnimationFrame(frame);
   }, [openMenu]);
 
-  useEffect(() => {
-    if (!openMenu) {
-      return;
-    }
-
-    function isInsideActiveMenu(event: Event) {
-      const trigger = activeTriggerRef.current;
+  useOutsideInteractionDismiss({
+    active: Boolean(openMenu),
+    isInside: (event) => {
+      if (!openMenu) return false;
       const menu = document.querySelector<HTMLElement>(
-        `[data-utility-menu="${getMenuId(openMenu as Menu)}"]`
+        `[data-utility-menu="${getMenuId(openMenu)}"]`
       );
-      const path = event.composedPath();
-      const target = event.target;
 
-      return [trigger, menu].some((element) =>
-        Boolean(
-          element &&
-            (path.includes(element) ||
-              (target instanceof Node && element.contains(target)))
-        )
+      return [activeTriggerRef.current, menu].some((element) =>
+        isEventInsideElement(event, element)
       );
-    }
+    },
+    onDismiss: () => setOpenMenu(null)
+  });
 
-    function handleOutsideInteraction(event: Event) {
-      if (!isInsideActiveMenu(event)) {
-        setOpenMenu(null);
-      }
-    }
+  useEffect(() => {
+    if (!openMenu) return;
 
     function handleDocumentKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -160,15 +154,9 @@ export function useUtilityMenuKeyboard<Menu extends string>(scope: string) {
       }
     }
 
-    document.addEventListener("pointerdown", handleOutsideInteraction, true);
-    document.addEventListener("click", handleOutsideInteraction, true);
-    document.addEventListener("focusin", handleOutsideInteraction, true);
     document.addEventListener("keydown", handleDocumentKeyDown);
 
     return () => {
-      document.removeEventListener("pointerdown", handleOutsideInteraction, true);
-      document.removeEventListener("click", handleOutsideInteraction, true);
-      document.removeEventListener("focusin", handleOutsideInteraction, true);
       document.removeEventListener("keydown", handleDocumentKeyDown);
     };
   }, [openMenu]);

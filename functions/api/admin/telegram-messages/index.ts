@@ -12,7 +12,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const url = new URL(request.url);
     const typeValue = url.searchParams.get("type");
-    const resourceType = typeValue === "tool" || typeValue === "article"
+    const resourceType = typeValue === "tool" || typeValue === "article" || typeValue === "custom"
       ? readTelegramResourceType(typeValue)
       : null;
     const limitParam = url.searchParams.get("limit");

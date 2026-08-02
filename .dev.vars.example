@@ -1,14 +1,24 @@
-ADMIN_PASSWORD=change-this-password
+# Required administrator password
+# Local: copy this file to .dev.vars and fill in the value.
+# Cloudflare Pages: add ADMIN_PASSWORD as an encrypted Secret.
+ADMIN_PASSWORD=
 
-GITHUB_TOKEN=github_pat_your_read_only_token
+# Optional GitHub repository metadata
+# Add GITHUB_TOKEN as an encrypted Secret. Use a read-only token.
+# Without it, the admin browser reads public repository information directly from GitHub.
+GITHUB_TOKEN=
 
-# Optional Cloudflare Turnstile protection for administrator login and public tool submissions.
-# Create a Turnstile site, configure both values, then enable the service in the admin dashboard.
+# Optional administrator login protection
+# Add TURNSTILE_SITE_KEY as a plain variable and TURNSTILE_SECRET_KEY as an encrypted Secret.
+# Configure both values, redeploy, then enable Turnstile in Admin > Service Settings.
 TURNSTILE_SITE_KEY=
 TURNSTILE_SECRET_KEY=
 
-# Optional Telegram push for tools and articles.
-# Create a bot with @BotFather, invite it to the target chat or channel, then enable the service in the admin dashboard.
-# TGID accepts a numeric chat id (for example -1001234567890) or a public @channel name.
+# Optional Telegram push
+# Add TGTOKEN as an encrypted Secret.
+# Configure the recipient, test the connection, and enable Telegram in Admin > Service Settings.
 TGTOKEN=
-TGID=
+
+# D1 database binding
+# Bind the HTools D1 database with the variable name DB in Cloudflare Pages.
+# DB is a binding, not an environment variable, so no DB value is listed here.

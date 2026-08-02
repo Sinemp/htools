@@ -8,8 +8,8 @@ export function useLoadingSkeleton(
   delay = SKELETON_DELAY_MS,
   minDuration = SKELETON_MIN_DURATION_MS
 ) {
-  const [visible, setVisible] = useState(false);
-  const shownAtRef = useRef(0);
+  const [visible, setVisible] = useState(() => isLoading && delay <= 0);
+  const shownAtRef = useRef(visible ? Date.now() : 0);
 
   useEffect(() => {
     if (isLoading) {

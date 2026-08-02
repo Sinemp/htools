@@ -26,7 +26,7 @@ export const en: Messages = {
     latestTools: "Latest Tools",
     latestArticles: "Latest Articles",
     moreTools: "More Tools",
-    morePosts: "More Posts",
+    moreArticles: "More Articles",
     footerDescription:
       "Explore curated tools and resources to accelerate your indie development journey.",
     footerProduct: "Product",

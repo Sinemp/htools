@@ -22,11 +22,6 @@ const DEFAULT_FAVICON_LINKS: {
     key: "ico",
     href: "/favicon.ico",
     sizes: "any"
-  },
-  {
-    key: "svg",
-    href: "/favicon.svg",
-    type: "image/svg+xml"
   }
 ];
 
@@ -959,8 +954,8 @@ export function getLocalizedErrorMessage(
     TURNSTILE_REQUIRED: t.admin.turnstileRequired,
     TURNSTILE_UNAVAILABLE: t.admin.turnstileServerFailed,
     TELEGRAM_NOT_CONFIGURED: isChinese
-      ? "Telegram 环境变量尚未完整配置。"
-      : "Telegram environment variables are not configured.",
+      ? "请先配置 Telegram 机器人 Token 和接收目标。"
+      : "Configure the Telegram bot token and recipient first.",
     TELEGRAM_DISABLED: isChinese
       ? "Telegram 推送尚未开启。"
       : "Telegram pushing is disabled.",

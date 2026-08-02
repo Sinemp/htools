@@ -252,6 +252,7 @@ export type TurnstileSettings = {
 export type TelegramSettings = {
   available: boolean;
   enabled: boolean;
+  target: string;
   footerMarkdown: string;
 };
 
@@ -308,7 +309,6 @@ export type TelegramPushPage = {
   limit: number;
   hasMore: boolean;
   nextCursor: string | null;
-  total: number;
 };
 
 export type HomeHeroContent = {
@@ -383,6 +383,7 @@ export type BackupCounts = {
   articles: number;
   contentSources: number;
   contentItems: number;
+  telegramMessages: number;
   settings: number;
 };
 

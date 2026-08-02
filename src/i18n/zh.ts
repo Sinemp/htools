@@ -24,7 +24,7 @@ export const zh: Messages = {
     latestTools: "最新工具",
     latestArticles: "最新文章",
     moreTools: "更多工具",
-    morePosts: "更多帖子",
+    moreArticles: "更多文章",
     footerDescription: "致力于收录各种开源、好用的互联网项目",
     footerProduct: "产品",
     footerSupport: "支持",

@@ -1,8 +1,5 @@
 import type { Locale } from "./i18n";
 
-export const ADMIN_MARKDOWN_EDITOR_MODE_STORAGE_KEY =
-  "htools_admin_markdown_editor_mode";
-
 export const MARKDOWN_EDITOR_ACTIONS = [
   "heading",
   "bold",
@@ -33,10 +30,6 @@ export type MarkdownEditorEdit = {
   selectionStart: number;
   selectionEnd: number;
 };
-
-export function readMarkdownEditorMode(value: string | null): MarkdownEditorMode {
-  return value === "preview" ? "preview" : "edit";
-}
 
 export function formatMarkdownSelection(
   value: string,

@@ -1,6 +1,5 @@
 import {
   getDatabase,
-  ensureTelegramMessageSchema,
   getAdminCategorySettings,
   InvalidRequestError,
   json,
@@ -232,10 +231,8 @@ async function deleteCategoryContent(
   scope: AdminCategoryScope,
   category: string
 ) {
-  await ensureTelegramMessageSchema(db);
   if (scope === "tools") {
     if (isAllCategory(category)) {
-      await db.prepare("DELETE FROM telegram_messages WHERE resource_type = 'tool'").run();
       return getChanges(await db.prepare("DELETE FROM tools").run());
     }
 
@@ -247,11 +244,6 @@ async function deleteCategoryContent(
       );
     }
 
-    await db.prepare(
-      `DELETE FROM telegram_messages
-       WHERE resource_type = 'tool'
-         AND resource_id IN (SELECT id FROM tools WHERE category = ?)`
-    ).bind(category).run();
     return getChanges(
       await db.prepare("DELETE FROM tools WHERE category = ?").bind(category).run()
     );
@@ -260,7 +252,6 @@ async function deleteCategoryContent(
   if (scope === "articles") {
     if (isAllCategory(category)) {
       await db.prepare("UPDATE content_items SET article_id = NULL").run();
-      await db.prepare("DELETE FROM telegram_messages WHERE resource_type = 'article'").run();
 
       return getChanges(await db.prepare("DELETE FROM articles").run());
     }
@@ -272,12 +263,6 @@ async function deleteCategoryContent(
     )
       .bind(category)
       .run();
-    await db.prepare(
-      `DELETE FROM telegram_messages
-       WHERE resource_type = 'article'
-         AND resource_id IN (SELECT id FROM articles WHERE category = ?)`
-    ).bind(category).run();
-
     return getChanges(
       await db.prepare("DELETE FROM articles WHERE category = ?")
         .bind(category)

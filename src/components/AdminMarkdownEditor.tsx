@@ -1,11 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Locale, Messages } from "../i18n";
 import {
-  ADMIN_MARKDOWN_EDITOR_MODE_STORAGE_KEY,
   MARKDOWN_EDITOR_ACTIONS,
   MARKDOWN_EDITOR_MODES,
   formatMarkdownSelection,
-  readMarkdownEditorMode,
   type MarkdownEditorMode
 } from "../markdown-editor";
 import type { ProxySettings } from "../types";
@@ -59,20 +57,14 @@ export default function AdminMarkdownEditor({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editPanelRef = useRef<HTMLDivElement>(null);
   const [editPanelHeight, setEditPanelHeight] = useState(0);
-  const [internalMode, setInternalMode] = useState<MarkdownEditorMode>(() => {
-    if (typeof window === "undefined") return "edit";
-    try {
-      return readMarkdownEditorMode(
-        window.localStorage.getItem(ADMIN_MARKDOWN_EDITOR_MODE_STORAGE_KEY)
-      );
-    } catch {
-      return "edit";
-    }
-  });
+  const [internalMode, setInternalMode] = useState<MarkdownEditorMode>("edit");
   const mode = controlledMode ?? internalMode;
+  const isMeasuringPreviewHeight =
+    mode === "preview" && editPanelHeight === 0;
+  const showEditPanel = mode === "edit" || isMeasuringPreviewHeight;
 
   useLayoutEffect(() => {
-    if (mode !== "edit") return;
+    if (!showEditPanel) return;
     const panel = editPanelRef.current;
     if (!panel) return;
 
@@ -89,7 +81,7 @@ export default function AdminMarkdownEditor({
     const observer = new ResizeObserver(updateHeight);
     observer.observe(panel);
     return () => observer.disconnect();
-  }, [mode]);
+  }, [showEditPanel]);
 
   useEffect(() => {
     if (required && mode === "preview" && !value.trim()) {
@@ -102,11 +94,6 @@ export default function AdminMarkdownEditor({
     if (nextMode === "preview" && required && !value.trim()) return;
     setInternalMode(nextMode);
     onModeChange?.(nextMode);
-    try {
-      window.localStorage.setItem(ADMIN_MARKDOWN_EDITOR_MODE_STORAGE_KEY, nextMode);
-    } catch {
-      // Editor preference is optional; private browsing may reject storage.
-    }
     if (nextMode !== "preview") {
       window.requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
     }
@@ -155,8 +142,13 @@ export default function AdminMarkdownEditor({
           </button>
         ))}
       </div>
-      {mode === "edit" ? (
-        <div className="admin-markdown-editor-edit" ref={editPanelRef}>
+      {showEditPanel ? (
+        <div
+          aria-hidden={isMeasuringPreviewHeight || undefined}
+          className="admin-markdown-editor-edit"
+          ref={editPanelRef}
+          style={isMeasuringPreviewHeight ? { visibility: "hidden" } : undefined}
+        >
           <div
             aria-label={text.toolbarLabel}
             className="admin-markdown-toolbar"

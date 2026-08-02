@@ -3,7 +3,6 @@ import {
   AtSign,
   BadgeCheck,
   Boxes,
-  Check,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -15,7 +14,6 @@ import {
   House,
   Instagram,
   LayoutDashboard,
-  Languages,
   Link2,
   Linkedin,
   LogIn,
@@ -29,7 +27,6 @@ import {
   Send,
   Sparkles,
   Star,
-  Sun,
   Twitter,
   UserRound,
   Wrench,
@@ -74,6 +71,7 @@ import { useLoadingSkeleton } from "./useLoadingSkeleton";
 import { useOverlayFocusManagement } from "./useOverlayFocusManagement";
 import { useVisualViewportKeyboard } from "./useVisualViewportKeyboard";
 import { useUtilityMenuKeyboard } from "./useUtilityMenuKeyboard";
+import { usePointerFocusRelease } from "./usePointerFocusRelease";
 import {
   CompactTagRow,
   SiteBrandIdentity,
@@ -82,6 +80,9 @@ import {
   SkeletonVisibility,
   useSiteSettings
 } from "./shared-ui";
+import UtilityMenuControls, {
+  type UtilityMenuController
+} from "./components/UtilityMenuControls";
 import {
   DEFAULT_SITE_SETTINGS,
   createArticleStructuredData,
@@ -111,7 +112,6 @@ import {
 } from "./public-api";
 import {
   getLocaleOption,
-  localeOptions,
   resolveLocale,
   translations,
   type Locale,
@@ -1306,8 +1306,8 @@ function HomePage({
                 {t.home.exploreAll}
                 <ArrowUpRight size={17} />
               </a>
-              <a className="ghost-button hero-ghost" href="#latest-tools">
-                {t.home.latestTools}
+              <a className="ghost-button hero-ghost" href="/submit">
+                {t.actions.submitTool}
               </a>
             </div>
           </div>
@@ -1408,7 +1408,7 @@ function HomePage({
           </div>
           <div className="section-action">
             <a className="primary-button glow-button small-glow" href="/articles">
-              {t.home.morePosts}
+              {t.home.moreArticles}
               <ArrowUpRight size={15} />
             </a>
           </div>
@@ -2436,6 +2436,7 @@ function HomeHeader({
   t: Messages;
   themeMode: ThemeMode;
 }) {
+  usePointerFocusRelease();
   const {
     closeMenu: closePublicUtilityMenu,
     getMenuId: getPublicUtilityMenuId,
@@ -2445,6 +2446,14 @@ function HomeHeader({
     setOpenMenu,
     toggleMenu: togglePublicUtilityMenu
   } = useUtilityMenuKeyboard<"locale" | "theme">("public");
+  const publicUtilityMenuController: UtilityMenuController = {
+    closeMenu: closePublicUtilityMenu,
+    getMenuId: getPublicUtilityMenuId,
+    handleMenuKeyDown: handlePublicUtilityMenuKeyDown,
+    handleTriggerKeyDown: handlePublicUtilityMenuTriggerKeyDown,
+    openMenu,
+    toggleMenu: togglePublicUtilityMenu
+  };
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isMobileNavClosing, setIsMobileNavClosing] = useState(false);
@@ -2531,11 +2540,6 @@ function HomeHeader({
   const canOpenGlobalSearch = showSearch || activePage === "home";
   const isSearchOverlayOpen = canOpenGlobalSearch && isSearchOpen;
   const shouldLockBodyScroll = isSearchOverlayOpen || isMobileNavVisible;
-  const themeOptions: Array<{ label: string; value: ThemeMode }> = [
-    { label: t.theme.light, value: "light" },
-    { label: t.theme.dark, value: "dark" },
-    { label: t.theme.system, value: "system" }
-  ];
   const searchOverlayFocus = useOverlayFocusManagement({
     active: isSearchOverlayOpen,
     containerRef: searchPanelRef,
@@ -2978,92 +2982,18 @@ function HomeHeader({
               </nav>
 
               <div className="mobile-nav-bottom">
-                <div className="mobile-nav-utility">
-                  <div className="menu-control mobile-utility-menu">
-                    <button
-                      className="icon-button"
-                      type="button"
-                      aria-label={t.actions.toggleLanguage}
-                      aria-expanded={openMenu === "locale"}
-                      aria-haspopup="menu"
-                      onClick={(event) =>
-                        togglePublicUtilityMenu("locale", event.currentTarget)
-                      }
-                      onKeyDown={(event) =>
-                        handlePublicUtilityMenuTriggerKeyDown("locale", event)
-                      }
-                    >
-                      <Languages size={18} />
-                    </button>
-                    {openMenu === "locale" ? (
-                      <div
-                        className="floating-menu language-menu"
-                        role="menu"
-                        data-utility-menu={getPublicUtilityMenuId("locale")}
-                        onKeyDown={handlePublicUtilityMenuKeyDown}
-                      >
-                        {localeOptions.map((option) => (
-                          <button
-                            className="menu-option"
-                            key={option.code}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={option.code === locale}
-                            onClick={() => {
-                              onLocaleChange(option.code);
-                              closePublicUtilityMenu(true);
-                            }}
-                          >
-                            <span>{option.label}</span>
-                            {option.code === locale ? <Check size={16} /> : null}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="menu-control mobile-utility-menu">
-                    <button
-                      className="icon-button"
-                      type="button"
-                      aria-label={t.actions.toggleTheme}
-                      aria-expanded={openMenu === "theme"}
-                      aria-haspopup="menu"
-                      onClick={(event) =>
-                        togglePublicUtilityMenu("theme", event.currentTarget)
-                      }
-                      onKeyDown={(event) =>
-                        handlePublicUtilityMenuTriggerKeyDown("theme", event)
-                      }
-                    >
-                      <Sun size={18} />
-                    </button>
-                    {openMenu === "theme" ? (
-                      <div
-                        className="floating-menu theme-menu"
-                        role="menu"
-                        data-utility-menu={getPublicUtilityMenuId("theme")}
-                        onKeyDown={handlePublicUtilityMenuKeyDown}
-                      >
-                        {themeOptions.map((option) => (
-                          <button
-                            className="menu-option"
-                            key={option.value}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={option.value === themeMode}
-                            onClick={() => {
-                              onThemeChange(option.value);
-                              closePublicUtilityMenu(true);
-                            }}
-                          >
-                            <span>{option.label}</span>
-                            {option.value === themeMode ? <Check size={16} /> : null}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
+                <UtilityMenuControls
+                  className="mobile-nav-utility"
+                  controller={publicUtilityMenuController}
+                  iconSize={18}
+                  locale={locale}
+                  localeControlClassName="mobile-utility-menu"
+                  onLocaleChange={onLocaleChange}
+                  onThemeChange={onThemeChange}
+                  t={t}
+                  themeControlClassName="mobile-utility-menu"
+                  themeMode={themeMode}
+                />
 
                 <a className="mobile-admin-card" href="/admin" onClick={closeMobileNav}>
                   <span className="mobile-admin-card-copy">
@@ -3133,91 +3063,19 @@ function HomeHeader({
               <kbd className="search-trigger-shortcut">{searchShortcutLabel}</kbd>
             </button>
           ) : null}
-          <div className="menu-control locale-control">
-            <button
-              className="icon-button locale-button"
-              type="button"
-              aria-label={t.actions.toggleLanguage}
-              aria-expanded={openMenu === "locale"}
-              aria-haspopup="menu"
-              onClick={(event) =>
-                togglePublicUtilityMenu("locale", event.currentTarget)
-              }
-              onKeyDown={(event) =>
-                handlePublicUtilityMenuTriggerKeyDown("locale", event)
-              }
-            >
-              <Languages size={18} />
-            </button>
-            {shouldRenderTopbarMenus && openMenu === "locale" ? (
-              <div
-                className="floating-menu language-menu"
-                role="menu"
-                data-utility-menu={getPublicUtilityMenuId("locale")}
-                onKeyDown={handlePublicUtilityMenuKeyDown}
-              >
-                {localeOptions.map((option) => (
-                  <button
-                    className="menu-option"
-                    key={option.code}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={option.code === locale}
-                    onClick={() => {
-                      onLocaleChange(option.code);
-                      closePublicUtilityMenu(true);
-                    }}
-                  >
-                    <span>{option.label}</span>
-                    {option.code === locale ? <Check size={16} /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="menu-control theme-control">
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t.actions.toggleTheme}
-              aria-expanded={openMenu === "theme"}
-              aria-haspopup="menu"
-              onClick={(event) =>
-                togglePublicUtilityMenu("theme", event.currentTarget)
-              }
-              onKeyDown={(event) =>
-                handlePublicUtilityMenuTriggerKeyDown("theme", event)
-              }
-            >
-              <Sun size={18} />
-            </button>
-            {shouldRenderTopbarMenus && openMenu === "theme" ? (
-              <div
-                className="floating-menu theme-menu"
-                role="menu"
-                data-utility-menu={getPublicUtilityMenuId("theme")}
-                onKeyDown={handlePublicUtilityMenuKeyDown}
-              >
-                {themeOptions.map((option) => (
-                  <button
-                    className="menu-option"
-                    key={option.value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={option.value === themeMode}
-                    onClick={() => {
-                      onThemeChange(option.value);
-                      closePublicUtilityMenu(true);
-                    }}
-                  >
-                    <span>{option.label}</span>
-                    {option.value === themeMode ? <Check size={16} /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <UtilityMenuControls
+            className="home-topbar-utility-menus"
+            controller={publicUtilityMenuController}
+            iconSize={18}
+            locale={locale}
+            localeControlClassName="locale-control"
+            onLocaleChange={onLocaleChange}
+            onThemeChange={onThemeChange}
+            showMenus={shouldRenderTopbarMenus}
+            t={t}
+            themeControlClassName="theme-control"
+            themeMode={themeMode}
+          />
           <a className="login-button" href="/admin">
             <UserRound className="login-icon" size={21} />
             <span className="login-label">{t.actions.login}</span>

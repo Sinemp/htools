@@ -25,8 +25,9 @@ DROP INDEX IF EXISTS idx_tools_featured;
 
 CREATE TABLE IF NOT EXISTS telegram_messages (
   id TEXT PRIMARY KEY,
-  resource_type TEXT NOT NULL CHECK (resource_type IN ('tool', 'article')),
+  resource_type TEXT NOT NULL CHECK (resource_type IN ('tool', 'article', 'custom')),
   resource_id TEXT NOT NULL,
+  custom_title TEXT NOT NULL DEFAULT '',
   chat_id TEXT NOT NULL,
   target_ref TEXT NOT NULL DEFAULT '',
   message_id TEXT NOT NULL,
@@ -296,7 +297,7 @@ FROM content_items
 JOIN content_sources ON content_sources.id = content_items.source_id;
 
 INSERT INTO app_settings (key, value, updated_at)
-VALUES ('database_schema_version', '11', CURRENT_TIMESTAMP)
+VALUES ('database_schema_version', '12', CURRENT_TIMESTAMP)
 ON CONFLICT(key) DO UPDATE SET
   value = excluded.value,
   updated_at = CURRENT_TIMESTAMP;

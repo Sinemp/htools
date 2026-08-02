@@ -17,10 +17,12 @@ const TELEGRAM_MAX_BODY_LENGTH = 4096;
 const TELEGRAM_SECTION_SEPARATOR = "\n\n";
 const TELEGRAM_MESSAGE_TOO_LONG_ERROR =
   `Telegram message exceeds the ${TELEGRAM_MAX_MESSAGE_LENGTH} character limit.`;
+const TELEGRAM_NOT_CONFIGURED_ERROR = "Telegram configuration is incomplete.";
 
 export type TelegramSettings = {
   available: boolean;
   enabled: boolean;
+  target: string;
   footerMarkdown: string;
 };
 
@@ -174,26 +176,45 @@ type TelegramSendPayload = {
 };
 
 export async function getTelegramSettings(env: Env): Promise<TelegramSettings> {
-  const available = hasTelegramEnvironment(env);
   const db = await getDatabase(env);
   const row = await db.prepare("SELECT value FROM app_settings WHERE key = ?")
     .bind(TELEGRAM_SETTINGS_KEY)
     .first<{ value: string }>();
 
-  if (!row?.value) return { available, enabled: false, footerMarkdown: "" };
+  if (!row?.value) {
+    const target = getTelegramEnvironmentTarget(env);
+    return {
+      available: hasTelegramConfiguration(env, target),
+      enabled: false,
+      target,
+      footerMarkdown: ""
+    };
+  }
 
   try {
     const parsed = JSON.parse(row.value) as {
       enabled?: unknown;
+      target?: unknown;
       footerMarkdown?: unknown;
     };
+    const target = Object.prototype.hasOwnProperty.call(parsed, "target")
+      ? normalizeTelegramTarget(parsed.target)
+      : getTelegramEnvironmentTarget(env);
+    const available = hasTelegramConfiguration(env, target);
     return {
       available,
       enabled: available && parsed.enabled === true,
+      target,
       footerMarkdown: normalizeFooterMarkdown(parsed.footerMarkdown)
     };
   } catch {
-    return { available, enabled: false, footerMarkdown: "" };
+    const target = getTelegramEnvironmentTarget(env);
+    return {
+      available: hasTelegramConfiguration(env, target),
+      enabled: false,
+      target,
+      footerMarkdown: ""
+    };
   }
 }
 
@@ -205,7 +226,7 @@ export function writeTelegramErrorResponse(error: unknown, fallback: string) {
   if (isTelegramPermissionError(message)) {
     return jsonError(message, "TELEGRAM_PERMISSION_DENIED", { status: 403 });
   }
-  if (message === "Telegram environment variables are not configured.") {
+  if (message === TELEGRAM_NOT_CONFIGURED_ERROR) {
     return jsonError(message, "TELEGRAM_NOT_CONFIGURED", { status: 400 });
   }
   if (message === "Telegram pushing is disabled.") {
@@ -269,17 +290,18 @@ function isTelegramPermissionError(message: string) {
 
 export async function saveTelegramSettings(
   env: Env,
-  payload: { enabled?: unknown; footerMarkdown?: unknown }
+  payload: { enabled?: unknown; target?: unknown; footerMarkdown?: unknown }
 ) {
   const db = await getDatabase(env);
   const enabled = payload.enabled === true;
+  const target = normalizeTelegramTarget(payload.target);
   const footerMarkdown = normalizeFooterMarkdown(payload.footerMarkdown);
 
-  if (enabled && !hasTelegramEnvironment(env)) {
-    throw new InvalidRequestError("Telegram environment variables are not configured.");
+  if (enabled && !hasTelegramConfiguration(env, target)) {
+    throw new InvalidRequestError(TELEGRAM_NOT_CONFIGURED_ERROR);
   }
 
-  const settings = { enabled, footerMarkdown };
+  const settings = { enabled, target, footerMarkdown };
   await db.prepare(
     `INSERT INTO app_settings (key, value, updated_at)
      VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -292,7 +314,11 @@ export async function saveTelegramSettings(
 }
 
 export async function testTelegramConnection(env: Env) {
-  return resolveTelegramConnection(env);
+  const settings = await getTelegramSettings(env);
+  if (!settings.available) {
+    throw new InvalidRequestError(TELEGRAM_NOT_CONFIGURED_ERROR);
+  }
+  return resolveTelegramConnection(env, settings.target);
 }
 
 export function readTelegramResourceType(value: unknown): TelegramResourceType {
@@ -313,7 +339,6 @@ export async function listTelegramPushRecords(
 ) {
   const db = await getDatabase(env);
   await ensureTelegramMessageSchema(db);
-  const settings = await getTelegramSettings(env);
   const limit = Math.min(50, Math.max(1, Math.trunc(options.limit ?? 30)));
   const query = (options.query ?? "").trim().slice(0, 100);
   const terms = query ? createSearchTerms(query) : null;
@@ -358,38 +383,29 @@ export async function listTelegramPushRecords(
   const orderClause = sort === "oldest"
     ? "sort_key ASC, m.id ASC"
     : "sort_key DESC, m.id DESC";
-  const [pageResult, countRow] = await Promise.all([
-    db.prepare(
-      `SELECT m.*,
-              t.id AS tool_id, t.name AS tool_name,
-              t.description AS tool_description, t.url AS tool_url,
-              t.demo_url AS tool_demo_url, t.image AS tool_image,
-              t.tags AS tool_tags,
-              a.id AS article_id, a.slug AS article_slug,
-              a.title AS article_title, a.summary AS article_summary,
-              a.cover_image AS article_cover_image,
-              a.category AS article_category, a.tags AS article_tags,
-              a.published AS article_published,
-              ${sortExpression} AS sort_key
-       FROM telegram_messages AS m
-       ${joins}
-       WHERE ${pageConditions.join(" AND ")}
-       ORDER BY ${orderClause}
-       LIMIT ?`
-    )
-      .bind(...pageParams, limit + 1)
-      .all<TelegramPushListRow>(),
-    db.prepare(
-      `SELECT COUNT(*) AS total
-       FROM telegram_messages AS m
-       ${joins}
-       WHERE ${baseConditions.join(" AND ")}`
-    )
-      .bind(...baseParams)
-      .first<{ total: number }>()
-  ]);
+  const pageResult = await db.prepare(
+    `SELECT m.*,
+            t.id AS tool_id, t.name AS tool_name,
+            t.description AS tool_description, t.url AS tool_url,
+            t.demo_url AS tool_demo_url, t.image AS tool_image,
+            t.tags AS tool_tags,
+            a.id AS article_id, a.slug AS article_slug,
+            a.title AS article_title, a.summary AS article_summary,
+            a.cover_image AS article_cover_image,
+            a.category AS article_category, a.tags AS article_tags,
+            a.published AS article_published,
+            ${sortExpression} AS sort_key
+     FROM telegram_messages AS m
+     ${joins}
+     WHERE ${pageConditions.join(" AND ")}
+     ORDER BY ${orderClause}
+     LIMIT ?`
+  )
+    .bind(...pageParams, limit + 1)
+    .all<TelegramPushListRow>();
   const hasMore = pageResult.results.length > limit;
   const rows = pageResult.results.slice(0, limit);
+  const settings = await getTelegramSettings(env);
   const records = await Promise.all(
     rows.map((row) => toTelegramPushListRecord(row, origin, settings.footerMarkdown))
   );
@@ -401,8 +417,7 @@ export async function listTelegramPushRecords(
     hasMore,
     nextCursor: hasMore && lastRow
       ? createTelegramPushCursor({ sort, sortKey: lastRow.sort_key ?? "", id: lastRow.id })
-      : null,
-    total: Number(countRow?.total ?? 0)
+      : null
   };
 }
 
@@ -437,7 +452,7 @@ export async function getTelegramMessageState(
     row,
     defaultBody,
     defaultMediaUrl,
-    getTelegramTarget(env)
+    settings.target
   );
 }
 
@@ -454,7 +469,7 @@ export async function saveTelegramMessage(
   await ensureTelegramMessageSchema(db);
   const resource = await loadTelegramResource(db, resourceType, resourceId, origin);
   const customTitle = resolveTelegramCustomTitle(resource, payload);
-  const bodyMarkdown = normalizeBodyMarkdown(payload.bodyMarkdown);
+  const messageMarkdown = normalizeBodyMarkdown(payload.bodyMarkdown);
   const defaultMediaUrl = createDefaultTelegramMediaUrl(resource);
   const media = normalizeTelegramMedia(payload, defaultMediaUrl, false);
   const now = new Date().toISOString();
@@ -476,7 +491,7 @@ export async function saveTelegramMessage(
     )
       .bind(
         customTitle,
-        bodyMarkdown,
+        messageMarkdown,
         media.enabled ? 1 : 0,
         media.url,
         now,
@@ -496,7 +511,7 @@ export async function saveTelegramMessage(
         resource.type,
         resource.id,
         customTitle,
-        bodyMarkdown,
+        messageMarkdown,
         media.enabled ? 1 : 0,
         media.url,
         now
@@ -554,7 +569,7 @@ export async function sendTelegramMessage(
     media.enabled,
     media.url
   );
-  const targetRef = getTelegramTarget(env);
+  const targetRef = settings.target;
   const message = await telegramRequest<TelegramMessage>(env, "sendMessage", {
     chat_id: targetRef,
     ...createTelegramSendPayload(messageMarkdown, media.enabled ? media.url : "")
@@ -648,7 +663,7 @@ export async function updateTelegramMessage(
     throw new InvalidRequestError("Telegram message record was not found.");
   }
   const customTitle = resolveTelegramCustomTitle(resource, payload);
-  const targetRef = getTelegramTarget(env);
+  const targetRef = settings.target;
   if (hasTelegramTargetChanged(existing, targetRef)) {
     throw new InvalidRequestError("Telegram target has changed.");
   }
@@ -788,7 +803,7 @@ export async function recoverTelegramMessage(
     throw new InvalidRequestError("Telegram message record was not found.");
   }
 
-  const bodyMarkdown = payload.bodyMarkdown === undefined
+  const messageMarkdown = payload.bodyMarkdown === undefined
     ? existing.message_markdown
     : normalizeBodyMarkdown(payload.bodyMarkdown);
   const defaultMediaUrl = createDefaultTelegramMediaUrl(resource);
@@ -808,7 +823,7 @@ export async function recoverTelegramMessage(
      WHERE id = ?`
   )
     .bind(
-      bodyMarkdown,
+      messageMarkdown,
       media.enabled ? 1 : 0,
       media.url,
       new Date().toISOString(),
@@ -834,15 +849,18 @@ export function buildTelegramMessageMarkdown(
   const labels = locale === "zh"
     ? { article: "文章地址", project: "项目地址", demo: "演示地址" }
     : { article: "Article", project: "Project", demo: "Demo" };
-  const tags = resource.tags
-    .map(toTelegramHashtag)
-    .filter(Boolean)
-    .join(" ");
+  const editableBody = bodyMarkdown.trim();
+  const tags = resource.type === "custom"
+    ? ""
+    : resource.tags
+      .map(toTelegramHashtag)
+      .filter(Boolean)
+      .join(" ");
   const linkLabel = resource.type === "article" ? labels.article : labels.project;
   const sections = [
-    bodyMarkdown.trim(),
-    resource.url ? `${linkLabel}：${resource.url}` : "",
-    resource.demoUrl ? `${labels.demo}：${resource.demoUrl}` : "",
+    editableBody,
+    resource.url ? `${linkLabel}：[${resource.url}](${resource.url})` : "",
+    resource.demoUrl ? `${labels.demo}：[${resource.demoUrl}](${resource.demoUrl})` : "",
     tags,
     footerMarkdown.trim()
   ].filter(Boolean);
@@ -952,14 +970,14 @@ function escapeTelegramHtml(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function hasTelegramEnvironment(env: Env) {
-  return Boolean(getTelegramToken(env) && getTelegramTarget(env));
+function hasTelegramConfiguration(env: Env, target: string) {
+  return Boolean(getTelegramToken(env) && target);
 }
 
 async function requireEnabledTelegramSettings(env: Env) {
   const settings = await getTelegramSettings(env);
   if (!settings.available) {
-    throw new InvalidRequestError("Telegram environment variables are not configured.");
+    throw new InvalidRequestError(TELEGRAM_NOT_CONFIGURED_ERROR);
   }
   if (!settings.enabled) {
     throw new InvalidRequestError("Telegram pushing is disabled.");
@@ -967,10 +985,13 @@ async function requireEnabledTelegramSettings(env: Env) {
   return settings;
 }
 
-async function resolveTelegramConnection(env: Env): Promise<TelegramConnection> {
+async function resolveTelegramConnection(
+  env: Env,
+  target: string
+): Promise<TelegramConnection> {
   const bot = await telegramRequest<TelegramUser>(env, "getMe", {});
   const chat = await telegramRequest<TelegramChat>(env, "getChat", {
-    chat_id: getTelegramTarget(env)
+    chat_id: target
   });
   const type = chat.type ?? "unknown";
 
@@ -1015,8 +1036,8 @@ async function telegramRequest<T>(
   payload: Record<string, unknown>
 ): Promise<T> {
   const token = getTelegramToken(env);
-  if (!token || !getTelegramTarget(env)) {
-    throw new InvalidRequestError("Telegram environment variables are not configured.");
+  if (!token) {
+    throw new InvalidRequestError(TELEGRAM_NOT_CONFIGURED_ERROR);
   }
 
   let response: Response;
@@ -1044,11 +1065,20 @@ function getTelegramToken(env: Env) {
   return /^\d+:[A-Za-z0-9_-]{20,}$/.test(token) ? token : "";
 }
 
-function getTelegramTarget(env: Env) {
-  const target = env.TGID?.trim() ?? "";
+function getTelegramEnvironmentTarget(env: Env) {
+  try {
+    return normalizeTelegramTarget(env.TGID);
+  } catch {
+    return "";
+  }
+}
+
+function normalizeTelegramTarget(value: unknown) {
+  const target = typeof value === "string" ? value.trim() : "";
+  if (!target) return "";
   if (/^@[A-Za-z][A-Za-z0-9_]{3,31}$/.test(target)) return target;
   if (/^-?\d{5,20}$/.test(target)) return target;
-  return "";
+  throw new InvalidRequestError("Telegram target is invalid.");
 }
 
 function normalizeFooterMarkdown(value: unknown) {
@@ -1110,6 +1140,9 @@ async function toTelegramPushListRecord(
   footerMarkdown: string
 ): Promise<TelegramPushListRecord> {
   const resource = createTelegramPushListResource(row, origin, footerMarkdown);
+  const messageMarkdown = normalizeTelegramEditableMessageMarkdown(
+    row.message_markdown
+  );
   const mediaEnabled = row.media_enabled === 1;
   const mediaUrl = getTelegramMediaUrl(row.media_url);
   const currentHash = await createTelegramMessageFingerprint(
@@ -1125,7 +1158,7 @@ async function toTelegramPushListRecord(
     title: resource?.title ?? readTelegramMessageTitle(row.message_markdown),
     resourceExists: Boolean(resource),
     resource,
-    messageMarkdown: row.message_markdown,
+    messageMarkdown,
     mediaEnabled,
     mediaUrl,
     syncStatus: !row.message_id
@@ -1215,6 +1248,14 @@ function stripTelegramFooter(markdown: string, footerMarkdown: string) {
   const footer = footerMarkdown.trim();
   if (!footer || !body.endsWith(footer)) return body;
   return body.slice(0, body.length - footer.length).trim();
+}
+
+export function normalizeTelegramEditableMessageMarkdown(markdown: string) {
+  return markdown.replace(
+    /^(项目地址|演示地址|文章地址|Project|Article|Demo|Repository)([：:])\s*(https?:\/\/\S+)$/gim,
+    (_line, label: string, separator: string, url: string) =>
+      `${label}${separator}[${url}](${url})`
+  );
 }
 
 function parseCustomPushContent(
@@ -1378,10 +1419,13 @@ async function toTelegramMessageState(
   targetRef: string
 ): Promise<TelegramMessageState> {
   const sentMediaUrl = getTelegramMediaUrl(row?.media_url ?? "") || defaultMediaUrl;
-  const bodyMarkdown = row?.message_markdown || defaultBody;
+  const storedMarkdown = row?.message_markdown || "";
+  const bodyMarkdown = storedMarkdown
+    ? normalizeTelegramEditableMessageMarkdown(storedMarkdown)
+    : defaultBody;
   const mediaEnabled = row ? row.media_enabled === 1 : false;
   const currentHash = await createTelegramMessageFingerprint(
-    bodyMarkdown,
+    storedMarkdown || bodyMarkdown,
     mediaEnabled,
     sentMediaUrl
   );

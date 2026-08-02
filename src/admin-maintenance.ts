@@ -30,6 +30,7 @@ const BACKUP_DATA_FIELDS = [
   "articles",
   "contentSources",
   "contentItems",
+  "telegramMessages",
   "settings"
 ] as const;
 
@@ -115,6 +116,7 @@ function readBackupCounts(data: Record<string, unknown>): BackupCounts {
     articles: readBackupCount(data.articles),
     contentSources: readBackupCount(data.contentSources),
     contentItems: readBackupCount(data.contentItems),
+    telegramMessages: readBackupCount(data.telegramMessages),
     settings: readBackupCount(data.settings)
   };
 }

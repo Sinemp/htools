@@ -808,7 +808,7 @@ export async function loadTelegramSettings(
 }
 
 export async function saveTelegramSettings(
-  input: Pick<TelegramSettings, "enabled" | "footerMarkdown">,
+  input: Pick<TelegramSettings, "enabled" | "target" | "footerMarkdown">,
   token: string
 ) {
   const response = await fetch("/api/admin/telegram-settings", {

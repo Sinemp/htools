@@ -25,6 +25,7 @@ type BackupCounts = {
   articles: number;
   contentSources: number;
   contentItems: number;
+  telegramMessages: number;
   settings: number;
 };
 
@@ -60,6 +61,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const db = await getDatabase(env);
     const data = await readBackupData(db);
+    validateBackupIntegrity(data);
     const counts = createBackupCounts(data);
 
     return json({
@@ -665,9 +667,8 @@ function normalizeTelegramMessageRow(
   const row = readRecord(value, `telegramMessages[${index}]`);
   const messageId = readString(row.message_id);
   const chatId = readString(row.chat_id);
-  const legacyToolId = readString(row.tool_id);
-  const resourceType = readString(row.resource_type) || (legacyToolId ? "tool" : "");
-  const resourceId = readString(row.resource_id) || legacyToolId;
+  const resourceType = readString(row.resource_type);
+  const resourceId = readString(row.resource_id);
   const sentAt = readString(row.sent_at) || (messageId ? now : "");
 
   if (
@@ -693,10 +694,7 @@ function normalizeTelegramMessageRow(
     target_ref: readString(row.target_ref),
     message_id: messageId,
     message_markdown: readString(row.message_markdown),
-    media_enabled: readIntegerFlag(
-      row.media_enabled,
-      readIntegerFlag(row.link_preview_enabled, 0)
-    ),
+    media_enabled: readIntegerFlag(row.media_enabled),
     media_url: readString(row.media_url),
     last_pushed_hash: readString(row.last_pushed_hash),
     sent_at: sentAt,
@@ -729,6 +727,7 @@ function createBackupCounts(data: BackupData): BackupCounts {
     articles: data.articles.length,
     contentSources: data.contentSources.length,
     contentItems: data.contentItems.length,
+    telegramMessages: data.telegramMessages.length,
     settings: data.settings.length
   };
 }

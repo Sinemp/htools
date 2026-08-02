@@ -1,8 +1,8 @@
-import { ArrowDownUp, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Eraser, Eye, FileText, Github, Languages, LogOut, PanelLeft, Plus, RefreshCw, Rss, Search, Send, Settings, ShieldCheck, Star, SquarePen, Sun, Tags, Trash2, Upload, Wand2, Wrench, X } from "lucide-react";
-import { ChangeEvent, CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownUp, ArrowRightLeft, ArrowUp, ArrowUpRight, CheckCircle2, ChevronDown, ChevronRight, Circle, Eraser, FileText, Github, LogOut, PanelLeft, Plus, RefreshCw, Rss, Search, Send, Settings, ShieldCheck, Star, SquarePen, Tags, Trash2, Upload, Wand2, Wrench, X } from "lucide-react";
+import { ChangeEvent, CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { applyAdminCategoryAction, checkLinks, createArticle, createContentSource, createTool, deleteArticle, deleteContentSource, deleteTelegramPush, deleteTool, exportBackupData, exportToolSourceData, importTools, loadAdminArticle, loadAdminArticles, loadAdminAuthConfig, loadAdminCategorySettings, loadAdminSecuritySettings, loadAdminTools, loadContentItems, loadContentSources, loadGitHubSettings, loadGitHubToolMetadata, loadProxySettings, loadSiteConfiguration, loadSiteSettings, loadSourceSettings, loadTelegramMessage, loadTelegramPushRecords, loadTelegramSettings, loadTurnstileSettings, loadUmamiSettings, login, patchSiteSettings, recoverTelegramMessage, resetFactorySettings, restoreBackupData, saveAdminCategorySettings, saveGitHubSettings, saveProxySettings, saveSourceSettings, saveTelegramMessage, saveTelegramSettings, saveTurnstileSettings, saveUmamiSettings, sendTelegramMessage, syncContentSource, testTelegramSettings, updateArticle, updateArticlePublished, updateAdminPassword, updateContentSource, convertContentItemToArticle, previewContentSource, updateTelegramMessage, updateTool, type AdminAuthConfig } from "./admin-api";
-import { localeOptions, translations, type Locale, type Messages } from "./i18n";
+import { translations, type Locale, type Messages } from "./i18n";
 import { normalizeProxyBaseUrl, normalizeProxyMode, normalizeProxyScope, proxifyUrl } from "./proxy";
 import type { AdminCategoryAction, AdminCategoryScope, AdminCategorySettings, AdminSecuritySettings, Article, ArticleInput, ArticleSummary, ContentItemSummary, ContentSource, ContentSourceInput, FeedPreview, FooterSettings, GitHubSettings, GitHubSettingsInput, GitHubToolMetadata, HomeHeroContent, LinkCheckResult, ProxySettings, HtoolsBackup, SiteSettings, SourceSettings, TelegramConnection, TelegramMessage, TelegramPushRecord, TelegramResourceType, TelegramSettings, TurnstileSettings, Tool, ToolImportMode, ToolInput, UmamiSettings } from "./types";
 import { DEFAULT_FOOTER_SETTINGS, DEFAULT_HOME_HERO_SETTINGS, DEFAULT_SITE_SETTINGS, formatFooterJson, getEditableSiteSettings, getFooterFormValues, getHomeHeroSettings, getLocalizedErrorMessage, getSiteDisplayName, getSiteFooterSettings, getSourceErrorMessage, readSiteIconFile } from "./site-helpers";
@@ -48,10 +48,19 @@ import { useLoadingSkeleton } from "./useLoadingSkeleton";
 import { useOverlayFocusManagement } from "./useOverlayFocusManagement";
 import { useVisualViewportKeyboard } from "./useVisualViewportKeyboard";
 import { useUtilityMenuKeyboard } from "./useUtilityMenuKeyboard";
+import {
+  isEventInsideElement,
+  useOutsideInteractionDismiss
+} from "./useOutsideInteractionDismiss";
+import {
+  getLastInputModality,
+  usePointerFocusRelease
+} from "./usePointerFocusRelease";
 import { hasCompleteUmamiSettings, normalizeUmamiScriptUrl, normalizeUmamiWebsiteId } from "./umami";
-import { buildTelegramPreviewMarkdown, countTelegramMessageCharacters, createDefaultTelegramBody, createTelegramArticleResource, createTelegramCustomBodyExample, createTelegramResourceMediaUrl, createTelegramToolResource, getTelegramText, readTelegramBodyTitle, replaceTelegramBodyTitle, TELEGRAM_MESSAGE_LIMIT, type TelegramPushResource } from "./telegram";
+import { buildTelegramPreviewMarkdown, countTelegramMessageCharacters, createDefaultTelegramBody, createTelegramArticleResource, createTelegramCustomBodyExample, createTelegramResourceMediaUrl, createTelegramToolResource, escapeTelegramPreviewHashtags, getTelegramText, readTelegramBodyTitle, replaceTelegramBodyTitle, TELEGRAM_MESSAGE_LIMIT, type TelegramPushResource } from "./telegram";
 import { getAdminMaintenanceText, getAdminWorkspaceText, getContentFlowText } from "./admin-text";
 import AdminMarkdownEditor from "./components/AdminMarkdownEditor";
+import UtilityMenuControls from "./components/UtilityMenuControls";
 import { TELEGRAM_MARKDOWN_EDITOR_ACTIONS, type MarkdownEditorMode } from "./markdown-editor";
 import MarkdownContent from "./components/MarkdownContent";
 import TurnstileWidget from "./components/TurnstileWidget";
@@ -208,21 +217,6 @@ function getStoredAdminFilter(key: string, fallback: string) {
   return localStorage.getItem(key) ?? fallback;
 }
 
-function startTouchButtonPress(event: ReactPointerEvent<HTMLButtonElement>) {
-  if (event.pointerType === "touch") {
-    event.currentTarget.classList.add("is-touch-pressing");
-  }
-}
-
-function releaseTouchButtonFocus(event: ReactPointerEvent<HTMLButtonElement>) {
-  if (event.pointerType !== "touch") return;
-  const button = event.currentTarget;
-  button.classList.remove("is-touch-pressing");
-  window.requestAnimationFrame(() => {
-    if (document.activeElement === button) button.blur();
-  });
-}
-
 function AdminSortButton({
   mode,
   onChange,
@@ -242,9 +236,6 @@ function AdminSortButton({
       type="button"
       aria-label={label}
       title={label}
-      onPointerCancel={releaseTouchButtonFocus}
-      onPointerDown={startTouchButtonPress}
-      onPointerUp={releaseTouchButtonFocus}
       onClick={() => onChange(mode === "latest" ? "oldest" : "latest")}
     >
       <ArrowDownUp size={16} />
@@ -342,9 +333,6 @@ function AdminFilterBar({
           className="ghost-button admin-clear-filter"
           disabled={!hasActiveFilter}
           type="button"
-          onPointerCancel={releaseTouchButtonFocus}
-          onPointerDown={startTouchButtonPress}
-          onPointerUp={releaseTouchButtonFocus}
           onClick={onClear}
         >
           <Eraser size={16} />
@@ -607,6 +595,7 @@ export default function AdminApp({
   t: Messages;
   themeMode: ThemeMode;
 }) {
+  usePointerFocusRelease();
   const {
     closeMenu: closeAdminMenu,
     getMenuId: getAdminMenuId,
@@ -616,6 +605,14 @@ export default function AdminApp({
     setOpenMenu: setOpenAdminMenu,
     toggleMenu: toggleAdminMenu
   } = useUtilityMenuKeyboard<"locale" | "theme">("admin");
+  const adminUtilityMenuController = {
+    closeMenu: closeAdminMenu,
+    getMenuId: getAdminMenuId,
+    handleMenuKeyDown: handleAdminMenuKeyDown,
+    handleTriggerKeyDown: handleAdminMenuTriggerKeyDown,
+    openMenu: openAdminMenu,
+    toggleMenu: toggleAdminMenu
+  };
   const [token, setToken] = useState(() => localStorage.getItem("htools_token") ?? "");
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -643,6 +640,7 @@ export default function AdminApp({
   const [telegramSettings, setTelegramSettings] = useState<TelegramSettings>({
     available: false,
     enabled: false,
+    target: "",
     footerMarkdown: ""
   });
   const [telegramSettingsLoading, setTelegramSettingsLoading] = useState(
@@ -658,7 +656,6 @@ export default function AdminApp({
     getStoredAdminSortMode(ADMIN_VIEW_STATE_STORAGE_KEYS.telegram.sort)
   );
   const [debouncedTelegramPushSearch, setDebouncedTelegramPushSearch] = useState("");
-  const [telegramPushTotal, setTelegramPushTotal] = useState(0);
   const [telegramPushHasMore, setTelegramPushHasMore] = useState(false);
   const [isLoadingTelegramPushes, setIsLoadingTelegramPushes] = useState(false);
   const [isLoadingMoreTelegramPushes, setIsLoadingMoreTelegramPushes] = useState(false);
@@ -674,6 +671,7 @@ export default function AdminApp({
   const [isPushingTelegramRecord, setIsPushingTelegramRecord] = useState(false);
   const [telegramResource, setTelegramResource] = useState<TelegramPushResource | null>(null);
   const [telegramMessage, setTelegramMessage] = useState<TelegramMessage | null>(null);
+  const [isCreatingTelegramPush, setIsCreatingTelegramPush] = useState(false);
   const [telegramQuickResource, setTelegramQuickResource] =
     useState<TelegramPushResource | null>(null);
   const [telegramQuickMessage, setTelegramQuickMessage] =
@@ -859,11 +857,6 @@ export default function AdminApp({
     returnFocusRef: sidebarToggleRef
   });
   const siteName = getSiteDisplayName(siteSettings);
-  const themeOptions: Array<{ label: string; value: ThemeMode }> = [
-    { label: t.theme.light, value: "light" },
-    { label: t.theme.dark, value: "dark" },
-    { label: t.theme.system, value: "system" }
-  ];
   const maintenanceText = getAdminMaintenanceText(locale);
   const workspaceText = getAdminWorkspaceText(locale);
   const categoryText = workspaceText.category;
@@ -1042,9 +1035,9 @@ export default function AdminApp({
   const showAdminContentSkeletons = useLoadingSkeleton(
     isLoadingContent && !hasLoadedContent
   );
-  const showTelegramPushSkeletons = useLoadingSkeleton(
-    isLoadingTelegramPushes && !hasLoadedTelegramPushes
-  );
+  const isInitialTelegramPushLoad =
+    adminView === "push" && !hasLoadedTelegramPushes;
+  const showTelegramPushSkeletons = isInitialTelegramPushLoad;
   const canFillGitHubMetadata = isGitHubRepoUrl(form.url);
   const githubMetadataDetailText = getGitHubMetadataDetailText(locale);
   const githubMetadataDetailItems = githubMetadataPreview
@@ -2172,7 +2165,6 @@ export default function AdminApp({
       );
       if (telegramPushRequestGenerationRef.current !== generation) return;
       setTelegramPushRecords(page.records);
-      setTelegramPushTotal(page.total);
       setTelegramPushHasMore(page.hasMore);
       telegramPushNextCursorRef.current = page.nextCursor;
     } catch (error) {
@@ -2218,7 +2210,6 @@ export default function AdminApp({
         page.records.forEach((record) => recordsById.set(record.id, record));
         return Array.from(recordsById.values());
       });
-      setTelegramPushTotal(page.total);
       setTelegramPushHasMore(page.hasMore);
       telegramPushNextCursorRef.current = page.nextCursor;
     } catch (error) {
@@ -2284,7 +2275,7 @@ export default function AdminApp({
         telegramSettingsLoadRequestRef.current === requestId &&
         !controller.signal.aborted
       ) {
-        setTelegramSettings({ available: false, enabled: false, footerMarkdown: "" });
+        setTelegramSettings({ available: false, enabled: false, target: "", footerMarkdown: "" });
         setTelegramSettingsLoadError(error);
       }
     } finally {
@@ -2348,14 +2339,13 @@ export default function AdminApp({
       setHasLoadedTools(false);
       setHasLoadedArticles(false);
       setHasLoadedContent(false);
-      setTelegramSettings({ available: false, enabled: false, footerMarkdown: "" });
+      setTelegramSettings({ available: false, enabled: false, target: "", footerMarkdown: "" });
       setTelegramSettingsLoading(false);
       setTelegramSettingsLoadError(null);
       telegramPushRequestGenerationRef.current += 1;
       telegramPushNextCursorRef.current = null;
       telegramPushLoadingCursorRef.current = null;
       setTelegramPushRecords([]);
-      setTelegramPushTotal(0);
       setTelegramPushHasMore(false);
       setIsLoadingTelegramPushes(false);
       setIsLoadingMoreTelegramPushes(false);
@@ -2365,6 +2355,7 @@ export default function AdminApp({
       setPendingDeleteTelegramPush(null);
       setTelegramResource(null);
       setTelegramMessage(null);
+      setIsCreatingTelegramPush(false);
       return;
     }
 
@@ -2720,6 +2711,7 @@ export default function AdminApp({
     if (telegramMessageSaving) return;
     setTelegramResource(null);
     setTelegramMessage(null);
+    setIsCreatingTelegramPush(false);
     setTelegramBodyMarkdown("");
     setTelegramMediaEnabled(false);
     setTelegramMediaUrl("");
@@ -2777,6 +2769,7 @@ export default function AdminApp({
       locale
     );
     setTelegramResource(resource);
+    setIsCreatingTelegramPush(true);
     setTelegramCustomTitle(readTelegramBodyTitle(defaultBody));
     setTelegramMessage({
       exists: false,
@@ -2883,6 +2876,7 @@ export default function AdminApp({
     );
     const defaultMediaUrl = createTelegramResourceMediaUrl(resource);
     setTelegramResource(resource);
+    setIsCreatingTelegramPush(false);
     setTelegramMessage({
       exists: false,
       targetChanged: false,
@@ -3039,6 +3033,7 @@ export default function AdminApp({
       if (adminView === "push") void refreshTelegramPushRecords();
       setTelegramResource(null);
       setTelegramMessage(null);
+      setIsCreatingTelegramPush(false);
       setTelegramBodyMarkdown("");
       setTelegramMediaEnabled(false);
       setTelegramMediaUrl("");
@@ -3677,92 +3672,15 @@ export default function AdminApp({
             >
               <SiteBrandIdentity showSubtitle />
             </button>
-            <div className="auth-menu-actions">
-              <div className="menu-control">
-                <button
-                  className="icon-button locale-button"
-                  type="button"
-                  aria-label={t.actions.toggleLanguage}
-                  aria-expanded={openAdminMenu === "locale"}
-                  aria-haspopup="menu"
-                  onClick={(event) =>
-                    toggleAdminMenu("locale", event.currentTarget)
-                  }
-                  onKeyDown={(event) =>
-                    handleAdminMenuTriggerKeyDown("locale", event)
-                  }
-                >
-                  <Languages size={17} />
-                </button>
-                {openAdminMenu === "locale" ? (
-                  <div
-                    className="floating-menu language-menu"
-                    role="menu"
-                    data-utility-menu={getAdminMenuId("locale")}
-                    onKeyDown={handleAdminMenuKeyDown}
-                  >
-                    {localeOptions.map((option) => (
-                      <button
-                        className="menu-option"
-                        key={option.code}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={option.code === locale}
-                        onClick={() => {
-                          onLocaleChange(option.code);
-                          closeAdminMenu(true);
-                        }}
-                      >
-                        <span>{option.label}</span>
-                        {option.code === locale ? <Check size={16} /> : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <div className="menu-control">
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label={t.actions.toggleTheme}
-                  aria-expanded={openAdminMenu === "theme"}
-                  aria-haspopup="menu"
-                  onClick={(event) =>
-                    toggleAdminMenu("theme", event.currentTarget)
-                  }
-                  onKeyDown={(event) =>
-                    handleAdminMenuTriggerKeyDown("theme", event)
-                  }
-                >
-                  <Sun size={17} />
-                </button>
-                {openAdminMenu === "theme" ? (
-                  <div
-                    className="floating-menu theme-menu"
-                    role="menu"
-                    data-utility-menu={getAdminMenuId("theme")}
-                    onKeyDown={handleAdminMenuKeyDown}
-                  >
-                    {themeOptions.map((option) => (
-                      <button
-                        className="menu-option"
-                        key={option.value}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={option.value === themeMode}
-                        onClick={() => {
-                          onThemeChange(option.value);
-                          closeAdminMenu(true);
-                        }}
-                      >
-                        <span>{option.label}</span>
-                        {option.value === themeMode ? <Check size={16} /> : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            <UtilityMenuControls
+              className="auth-menu-actions"
+              controller={adminUtilityMenuController}
+              locale={locale}
+              onLocaleChange={onLocaleChange}
+              onThemeChange={onThemeChange}
+              t={t}
+              themeMode={themeMode}
+            />
           </div>
           <form className="auth-form" onSubmit={handleLogin}>
             <label>
@@ -3900,92 +3818,18 @@ export default function AdminApp({
         </nav>
 
         <div className="admin-sidebar-bottom">
-          <div className="admin-sidebar-utility">
-            <div className="menu-control admin-utility-menu">
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={t.actions.toggleLanguage}
-                aria-expanded={openAdminMenu === "locale"}
-                aria-haspopup="menu"
-                onClick={(event) =>
-                  toggleAdminMenu("locale", event.currentTarget)
-                }
-                onKeyDown={(event) =>
-                  handleAdminMenuTriggerKeyDown("locale", event)
-                }
-              >
-                <Languages size={17} />
-              </button>
-              {openAdminMenu === "locale" ? (
-                <div
-                  className="floating-menu language-menu"
-                  role="menu"
-                  data-utility-menu={getAdminMenuId("locale")}
-                  onKeyDown={handleAdminMenuKeyDown}
-                >
-                  {localeOptions.map((option) => (
-                    <button
-                      className="menu-option"
-                      key={option.code}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={option.code === locale}
-                      onClick={() => {
-                        onLocaleChange(option.code);
-                        closeAdminMenu(true);
-                      }}
-                    >
-                      <span>{option.label}</span>
-                      {option.code === locale ? <Check size={16} /> : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div className="menu-control admin-utility-menu">
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={t.actions.toggleTheme}
-                aria-expanded={openAdminMenu === "theme"}
-                aria-haspopup="menu"
-                onClick={(event) =>
-                  toggleAdminMenu("theme", event.currentTarget)
-                }
-                onKeyDown={(event) =>
-                  handleAdminMenuTriggerKeyDown("theme", event)
-                }
-              >
-                <Sun size={17} />
-              </button>
-              {openAdminMenu === "theme" ? (
-                <div
-                  className="floating-menu theme-menu"
-                  role="menu"
-                  data-utility-menu={getAdminMenuId("theme")}
-                  onKeyDown={handleAdminMenuKeyDown}
-                >
-                  {themeOptions.map((option) => (
-                    <button
-                      className="menu-option"
-                      key={option.value}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={option.value === themeMode}
-                      onClick={() => {
-                        onThemeChange(option.value);
-                        closeAdminMenu(true);
-                      }}
-                    >
-                      <span>{option.label}</span>
-                      {option.value === themeMode ? <Check size={16} /> : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
+          <UtilityMenuControls
+            className="admin-sidebar-utility"
+            controller={adminUtilityMenuController}
+            iconSize={17}
+            locale={locale}
+            localeControlClassName="admin-utility-menu"
+            onLocaleChange={onLocaleChange}
+            onThemeChange={onThemeChange}
+            t={t}
+            themeControlClassName="admin-utility-menu"
+            themeMode={themeMode}
+          />
 
           <button
             className="admin-user-card"
@@ -4493,7 +4337,9 @@ export default function AdminApp({
                 telegramPushType !== "all" || Boolean(debouncedTelegramPushSearch)
               }
               hasMore={telegramPushHasMore}
-              isLoading={isLoadingTelegramPushes}
+              isLoading={
+                isLoadingTelegramPushes || !hasLoadedTelegramPushes
+              }
               isLoadingMore={isLoadingMoreTelegramPushes}
               loadError={telegramPushLoadError}
               onDelete={setPendingDeleteTelegramPush}
@@ -4593,8 +4439,8 @@ export default function AdminApp({
                 telegramQuickMessage?.exists
                   ? telegramText.quickPush.goManage
                   : telegramQuickMode === "published"
-                    ? telegramText.send
-                    : telegramText.save
+                    ? telegramText.quickPush.sendAction
+                    : telegramText.quickPush.draftAction
               }
               onPrimary={() => {
                 if (telegramQuickMessage?.exists) {
@@ -4850,7 +4696,7 @@ export default function AdminApp({
                 }
                 previewClassName="telegram-message-preview"
                 proxySettings={proxySettings}
-                rows={12}
+                rows={isCreatingTelegramPush ? 11 : 12}
                 text={t.markdownEditor}
                 value={telegramBodyMarkdown}
               />
@@ -5839,7 +5685,10 @@ function AdminTelegramPushPanel({
         <SkeletonVisibility visible={showSkeletons}>
           <section className="admin-tool-grid" aria-label={text.title}>
             {Array.from({ length: 8 }).map((_, index) => (
-              <TelegramPushRecordSkeleton key={index} />
+              <TelegramPushRecordSkeleton
+                key={index}
+                viewLabel={text.viewAction}
+              />
             ))}
           </section>
         </SkeletonVisibility>
@@ -5930,7 +5779,6 @@ function TelegramPushRecordCard({
   const summary = cleanArticleDisplayText(
     record.resource?.description || record.messageMarkdown
   );
-  const browseHref = record.resource?.url ?? "";
   const tags = record.resource?.tags ?? [];
 
   return (
@@ -5965,9 +5813,6 @@ function TelegramPushRecordCard({
               actions.close();
               onPush();
             }}
-            onPointerCancel={releaseTouchButtonFocus}
-            onPointerDown={startTouchButtonPress}
-            onPointerUp={releaseTouchButtonFocus}
           >
             {pushed ? <CheckCircle2 size={16} /> : <Circle size={16} />}
           </button>
@@ -5982,9 +5827,6 @@ function TelegramPushRecordCard({
             type="button"
             onClick={() => actions.setOpen((current) => !current)}
             onKeyDown={actions.handleTriggerKeyDown}
-            onPointerCancel={releaseTouchButtonFocus}
-            onPointerDown={startTouchButtonPress}
-            onPointerUp={releaseTouchButtonFocus}
           >
             <ChevronDown size={17} />
           </button>
@@ -6028,7 +5870,7 @@ function TelegramPushRecordCard({
       </div>
       <p className="admin-tool-description">{summary}</p>
       <div className="admin-tool-links">
-        <div className="admin-tool-link-row" title={browseHref || text.viewAction}>
+        <div className="admin-tool-link-row" title={text.viewAction}>
           <button
             className="admin-tool-link-text telegram-push-view-link"
             type="button"
@@ -6045,7 +5887,7 @@ function TelegramPushRecordCard({
   );
 }
 
-function TelegramPushRecordSkeleton() {
+function TelegramPushRecordSkeleton({ viewLabel }: { viewLabel: string }) {
   return (
     <article
       aria-hidden="true"
@@ -6075,7 +5917,13 @@ function TelegramPushRecordSkeleton() {
       </p>
       <div className="admin-tool-links">
         <div className="admin-tool-link-row">
-          <span className="admin-tool-link-text">Telegram push preview</span>
+          <button
+            className="admin-tool-link-text telegram-push-view-link"
+            disabled
+            type="button"
+          >
+            {viewLabel}
+          </button>
         </div>
       </div>
       <div className="admin-tool-card-footer">
@@ -6343,7 +6191,6 @@ function ContentItemCard({
 }) {
   const actions = useAdminCardActionMenu(`content-item:${item.id}`);
   const Icon = getCategoryIcon(item.category);
-  const ConvertIcon = item.articleId ? SquarePen : FileText;
   const displayDate = formatAdminDate(item.published_at ?? item.updated_at);
   const displayTitle = getArticleDisplayTitle(item);
   const previewImage = getContentItemPreviewImage(item);
@@ -6372,67 +6219,61 @@ function ContentItemCard({
           {displayDate ? <span>{displayDate}</span> : null}
         </div>
         <div className="admin-tool-card-actions" ref={actions.rootRef}>
-            <button
-              className={`icon-button admin-tool-menu-trigger ${
-                actions.open ? "is-active" : ""
-              }`}
-              type="button"
-              aria-expanded={actions.open}
-              aria-haspopup="menu"
-              aria-label={`${displayTitle} actions`}
-              disabled={isBusy}
-              ref={actions.triggerRef}
-              onKeyDown={actions.handleTriggerKeyDown}
-              onPointerCancel={releaseTouchButtonFocus}
-              onPointerDown={startTouchButtonPress}
-              onPointerUp={releaseTouchButtonFocus}
-              onClick={() => actions.setOpen((current) => !current)}
+          <button
+            aria-label={`${item.articleId ? contentText.updateArticle : contentText.convert}: ${displayTitle}`}
+            aria-pressed={Boolean(item.articleId)}
+            className={`icon-button admin-article-publish-button ${
+              item.articleId ? "is-active" : ""
+            }`}
+            disabled={isBusy}
+            title={item.articleId ? contentText.updateArticle : contentText.convert}
+            type="button"
+            onClick={() => {
+              actions.close();
+              onConvert();
+            }}
+          >
+            {item.articleId ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+          </button>
+          <button
+            aria-expanded={actions.open}
+            aria-haspopup="menu"
+            aria-label={`${displayTitle} actions`}
+            className={`icon-button admin-tool-menu-trigger ${
+              actions.open ? "is-active" : ""
+            }`}
+            disabled={isBusy}
+            ref={actions.triggerRef}
+            type="button"
+            onClick={() => actions.setOpen((current) => !current)}
+            onKeyDown={actions.handleTriggerKeyDown}
+          >
+            <ChevronDown size={17} />
+          </button>
+          {actions.open ? (
+            <div
+              className="admin-tool-action-menu"
+              onKeyDown={actions.handleMenuKeyDown}
+              role="menu"
             >
-              <ChevronDown size={17} />
-            </button>
-            {actions.open ? (
-              <div
-                className="admin-tool-action-menu"
-                role="menu"
-                onKeyDown={actions.handleMenuKeyDown}
+              <button
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  actions.close();
+                  window.open(originalHref, "_blank", "noopener,noreferrer");
+                }}
               >
-                <button
-                  disabled={isBusy}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    actions.close();
-                    onConvert();
-                  }}
-                >
-                  <ConvertIcon size={16} />
-                  <span className="admin-action-label-full">
-                    {item.articleId ? contentText.updateArticle : contentText.convert}
-                  </span>
-                  <span className="admin-action-label-short">
-                    {item.articleId
-                      ? contentText.updateArticleShort
-                      : contentText.convertShort}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    actions.close();
-                    window.open(originalHref, "_blank", "noopener,noreferrer");
-                  }}
-                >
-                  <ArrowUpRight size={16} />
-                  <span className="admin-action-label-full">
-                    {contentText.openOriginal}
-                  </span>
-                  <span className="admin-action-label-short">
-                    {contentText.openOriginalShort}
-                  </span>
-                </button>
-              </div>
-            ) : null}
+                <ArrowUpRight size={16} />
+                <span className="admin-action-label-full">
+                  {contentText.openOriginal}
+                </span>
+                <span className="admin-action-label-short">
+                  {contentText.openOriginalShort}
+                </span>
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="content-item-main">
@@ -6691,10 +6532,10 @@ function AdminCategoryFilter({
     }
   }
 
-  function selectCategory(category: string) {
+  function selectCategory(category: string, restoreFocus = true) {
     if (disabled) return;
     onChange(normalizeAdminCategoryValue(category));
-    closeCategoryFilter(true);
+    closeCategoryFilter(restoreFocus);
   }
 
   function scrollFilterToDialogTop(behavior: ScrollBehavior = "smooth") {
@@ -6725,16 +6566,14 @@ function AdminCategoryFilter({
     });
   }
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
+  useOutsideInteractionDismiss({
+    active: open,
+    isInside: (event) => isEventInsideElement(event, rootRef.current),
+    onDismiss: () => closeCategoryFilter()
+  });
 
-    function handlePointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        closeCategoryFilter();
-      }
-    }
+  useEffect(() => {
+    if (!open) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -6743,11 +6582,9 @@ function AdminCategoryFilter({
       }
     }
 
-    document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
@@ -6822,7 +6659,7 @@ function AdminCategoryFilter({
                 if (event.key === "Enter" && canCreateCategory) {
                   event.preventDefault();
                   event.stopPropagation();
-                  selectCategory(createCategoryName);
+                  selectCategory(createCategoryName, true);
                 }
               }}
             />
@@ -6840,7 +6677,7 @@ function AdminCategoryFilter({
             className="admin-category-filter-arrow"
             type="button"
             aria-label={t.actions.close}
-            onClick={() => closeCategoryFilter(true)}
+            onClick={(event) => closeCategoryFilter(event.detail === 0)}
           >
             <ChevronDown size={15} />
           </button>
@@ -6897,7 +6734,9 @@ function AdminCategoryFilter({
               role="option"
               aria-selected="false"
               data-admin-category-option="true"
-              onClick={() => selectCategory(createCategoryName)}
+              onClick={(event) =>
+                selectCategory(createCategoryName, event.detail === 0)
+              }
             >
               <Plus size={15} />
               <span>{categoryText.createLabel(createCategoryName)}</span>
@@ -6932,7 +6771,9 @@ function AdminCategoryFilter({
                         role="option"
                         aria-selected={selected}
                         data-admin-category-option="true"
-                        onClick={() => selectCategory(category)}
+                        onClick={(event) =>
+                          selectCategory(category, event.detail === 0)
+                        }
                       >
                         <span title={categoryLabel}>{displayCategoryLabel}</span>
                       </button>
@@ -7004,6 +6845,12 @@ function useAdminCardActionMenu(menuKey: string) {
     return () => window.removeEventListener(ADMIN_CARD_MENU_OPEN_EVENT, handleOtherMenu);
   }, [menuKey]);
 
+  useOutsideInteractionDismiss({
+    active: open,
+    isInside: (event) => isEventInsideElement(event, rootRef.current),
+    onDismiss: () => setOpen(false)
+  });
+
   useEffect(() => {
     if (!open) return;
     window.dispatchEvent(new CustomEvent(ADMIN_CARD_MENU_OPEN_EVENT, { detail: menuKey }));
@@ -7012,14 +6859,9 @@ function useAdminCardActionMenu(menuKey: string) {
       items[focusTargetRef.current === "first" ? 0 : items.length - 1].focus();
       focusTargetRef.current = null;
     }
-    function closeOutside(event: Event) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
     function closeOnScroll() { setOpen(false); }
-    document.addEventListener("pointerdown", closeOutside);
     window.addEventListener("scroll", closeOnScroll, true);
     return () => {
-      document.removeEventListener("pointerdown", closeOutside);
       window.removeEventListener("scroll", closeOnScroll, true);
     };
   }, [menuKey, open]);
@@ -7135,9 +6977,6 @@ function AdminToolCard({
             aria-label={t.form.featuredTool}
             aria-pressed={tool.featured}
             disabled={isBusy}
-            onPointerCancel={releaseTouchButtonFocus}
-            onPointerDown={startTouchButtonPress}
-            onPointerUp={releaseTouchButtonFocus}
             onClick={() => {
               actions.close();
               onToggleFeatured();
@@ -7156,9 +6995,6 @@ function AdminToolCard({
             disabled={isBusy}
             ref={actions.triggerRef}
             onKeyDown={actions.handleTriggerKeyDown}
-            onPointerCancel={releaseTouchButtonFocus}
-            onPointerDown={startTouchButtonPress}
-            onPointerUp={releaseTouchButtonFocus}
             onClick={() => actions.setOpen((current) => !current)}
           >
             <ChevronDown size={17} />
@@ -7291,9 +7127,6 @@ function AdminArticleCard({
             }
             aria-pressed={article.published}
             disabled={isBusy}
-            onPointerCancel={releaseTouchButtonFocus}
-            onPointerDown={startTouchButtonPress}
-            onPointerUp={releaseTouchButtonFocus}
             onClick={() => {
               actions.close();
               onTogglePublished();
@@ -7316,9 +7149,6 @@ function AdminArticleCard({
             disabled={isBusy}
             ref={actions.triggerRef}
             onKeyDown={actions.handleTriggerKeyDown}
-            onPointerCancel={releaseTouchButtonFocus}
-            onPointerDown={startTouchButtonPress}
-            onPointerUp={releaseTouchButtonFocus}
             onClick={() => actions.setOpen((current) => !current)}
           >
             <ChevronDown size={17} />
@@ -7405,9 +7235,6 @@ function AdminTelegramPushButton({
       type="button"
       aria-label={label}
       disabled={disabled}
-      onPointerCancel={releaseTouchButtonFocus}
-      onPointerDown={startTouchButtonPress}
-      onPointerUp={releaseTouchButtonFocus}
       onClick={onClick}
     >
       <Send size={15} />
@@ -7540,6 +7367,9 @@ function ContentFlowSkeleton({
                 </div>
                 <div className="admin-tool-card-actions">
                   <button className="icon-button" disabled type="button">
+                    <Circle size={16} />
+                  </button>
+                  <button className="icon-button" disabled type="button">
                     <ChevronDown size={17} />
                   </button>
                 </div>
@@ -7579,7 +7409,9 @@ function AdminSettingsHeadingSkeleton({
       }`.trim()}
     >
       <span className="skeleton-shimmer skeleton-line is-medium" />
-      {withStatus ? <span className="skeleton-shimmer source-card-status" /> : null}
+      {withStatus ? (
+        <span className="skeleton-shimmer settings-status-switch-skeleton" />
+      ) : null}
       <span className="skeleton-shimmer skeleton-line is-long" />
     </div>
   );
@@ -7647,22 +7479,80 @@ function AdminStatsSkeleton({
 }
 
 function SettingsStatusBadge({
+  ariaDescribedBy,
+  disabled = false,
   disabledLabel,
   enabled,
-  enabledLabel
+  enabledLabel,
+  onChange
 }: {
+  ariaDescribedBy?: string;
+  disabled?: boolean;
   disabledLabel: string;
   enabled: boolean;
   enabledLabel: string;
+  onChange: (value: boolean) => void;
 }) {
   return (
-    <span
+    <button
+      aria-checked={enabled}
+      aria-describedby={ariaDescribedBy}
+      aria-label={enabled ? enabledLabel : disabledLabel}
       aria-live="polite"
-      className="source-card-status"
+      className={`settings-status-switch ${disabled ? "is-disabled" : ""}`.trim()}
       data-state={enabled ? "enabled" : "disabled"}
+      disabled={disabled}
+      role="switch"
+      type="button"
+      onClick={() => onChange(!enabled)}
     >
-      {enabled ? enabledLabel : disabledLabel}
+      <span className="settings-status-switch-label">
+        {enabled ? enabledLabel : disabledLabel}
+      </span>
+      <span aria-hidden="true" className="settings-status-switch-track">
+        <span className="settings-status-switch-thumb" />
+      </span>
+    </button>
+  );
+}
+
+function AdminSettingsTextMask({ children }: { children: ReactNode }) {
+  return (
+    <span className="skeleton-shimmer admin-settings-text-mask">
+      {children}
     </span>
+  );
+}
+
+function AdminSettingsCopySkeleton({
+  className = "",
+  description,
+  title,
+  withStatus = false,
+  wrapTitle = false
+}: {
+  className?: string;
+  description: string;
+  title: string;
+  withStatus?: boolean;
+  wrapTitle?: boolean;
+}) {
+  const titleNode = (
+    <h3><AdminSettingsTextMask>{title}</AdminSettingsTextMask></h3>
+  );
+
+  return (
+    <div
+      className={`admin-settings-copy-skeleton ${className} ${
+        withStatus ? "has-status" : ""
+      }`.trim()}
+    >
+      {wrapTitle ? <div>{titleNode}</div> : titleNode}
+      {withStatus ? (
+        <span className="skeleton-shimmer settings-status-switch-skeleton" />
+      ) : null}
+      <p><AdminSettingsTextMask>{description}</AdminSettingsTextMask></p>
+    </div>
   );
 }
 
@@ -7693,7 +7583,7 @@ function GitHubSettingsForm({
   const [settingsReloadKey, setSettingsReloadKey] = useState(0);
   const settingsLoadRequestRef = useRef(0);
   const settingsLoadAbortRef = useRef<AbortController | null>(null);
-  const showSettingsSkeleton = useLoadingSkeleton(isLoadingSettings);
+  const showSettingsSkeleton = useLoadingSkeleton(isLoadingSettings, 0);
   const isDirty = Boolean(settings) && (
     form.owner !== settings?.owner ||
     form.repo !== settings?.repo ||
@@ -7841,7 +7731,7 @@ function GitHubSettingsForm({
   if (isLoadingSettings) {
     return (
       <SkeletonVisibility visible={showSettingsSkeleton}>
-        <GitHubSettingsFormSkeleton />
+        <GitHubSettingsFormSkeleton maintenanceText={maintenanceText} />
       </SkeletonVisibility>
     );
   }
@@ -7873,9 +7763,12 @@ function GitHubSettingsForm({
           <h3>{maintenanceText.githubSubmissionTitle}</h3>
         </div>
         <SettingsStatusBadge
+          ariaDescribedBy="github-settings-description"
+          disabled={isSaving || (!settings?.enabled && !hasSavedSubmissionConfig)}
           disabledLabel={t.githubSettings.statusDisabled}
           enabled={settings?.enabled ?? false}
           enabledLabel={t.githubSettings.statusEnabled}
+          onChange={() => void toggleEnabled()}
         />
         <p id="github-settings-description">{maintenanceText.githubSubmissionDescription}</p>
       </div>
@@ -7920,14 +7813,6 @@ function GitHubSettingsForm({
 
       <div className="source-public-actions github-settings-actions">
         <button
-          className="primary-button"
-          disabled={isSaving || (!settings?.enabled && !hasSavedSubmissionConfig)}
-          type="button"
-          onClick={() => void toggleEnabled()}
-        >
-          {settings?.enabled ? t.githubSettings.disabled : t.githubSettings.enabled}
-        </button>
-        <button
           className="ghost-button"
           disabled={isSaving || !isDirty}
           type="submit"
@@ -7968,16 +7853,26 @@ function AdminInitialLoadError({
   );
 }
 
-function GitHubSettingsFormSkeleton() {
+function GitHubSettingsFormSkeleton({
+  maintenanceText
+}: {
+  maintenanceText: ReturnType<typeof getAdminMaintenanceText>;
+}) {
   return (
     <div className="tool-form github-settings-form" aria-hidden="true">
-      <AdminSettingsHeadingSkeleton withStatus />
+      <AdminSettingsCopySkeleton
+        className="settings-card-heading github-settings-heading"
+        description={maintenanceText.githubSubmissionDescription}
+        title={maintenanceText.githubSubmissionTitle}
+        withStatus
+        wrapTitle
+      />
       <div className="settings-grid">
-        <AdminSettingsFieldSkeleton />
-        <AdminSettingsFieldSkeleton />
+        <AdminSettingsFieldSkeleton className="github-owner-skeleton" />
+        <AdminSettingsFieldSkeleton className="github-repo-skeleton" />
       </div>
-      <AdminSettingsFieldSkeleton />
-      <AdminSettingsActionsSkeleton className="github-settings-actions" />
+      <AdminSettingsFieldSkeleton className="github-labels-skeleton" />
+      <AdminSettingsActionsSkeleton className="github-settings-actions" count={1} />
     </div>
   );
 }
@@ -8016,7 +7911,7 @@ function TelegramMessagePreview({
       </div>
       <div className="telegram-channel-preview-message">
         <MarkdownContent
-          content={content}
+          content={escapeTelegramPreviewHashtags(content)}
           locale={locale}
           proxySettings={proxySettings}
         />
@@ -8078,27 +7973,35 @@ function TelegramSettingsCard({
   token: string;
 }) {
   const [footerMarkdown, setFooterMarkdown] = useState("");
+  const [target, setTarget] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [connection, setConnection] = useState<TelegramConnection | null>(null);
-  const showSkeleton = useLoadingSkeleton(loading);
-  const dirty = footerMarkdown !== settings.footerMarkdown;
+  const showSkeleton = useLoadingSkeleton(loading, 0);
+  const dirty = target !== settings.target || footerMarkdown !== settings.footerMarkdown;
   const error = settingsError
     ? getLocalizedErrorMessage(settingsError, t)
     : "";
 
   useEffect(() => {
+    setTarget(settings.target);
     setFooterMarkdown(settings.footerMarkdown);
     setConnection(null);
   }, [settings]);
 
-  async function persist(next: { enabled: boolean; footerMarkdown: string }, syncForm: boolean) {
+  async function persist(
+    next: { enabled: boolean; target: string; footerMarkdown: string },
+    syncForm: boolean
+  ) {
     if (saving) return;
     setSaving(true);
     setStatus("");
     try {
       const saved = await saveTelegramSettings(next, token);
-      if (syncForm) setFooterMarkdown(saved.footerMarkdown);
+      if (syncForm) {
+        setTarget(saved.target);
+        setFooterMarkdown(saved.footerMarkdown);
+      }
       onSettingsChange(saved);
       setStatus(
         next.enabled !== settings.enabled
@@ -8139,9 +8042,20 @@ function TelegramSettingsCard({
       <article className="source-public-card telegram-settings-card">
         <SkeletonVisibility visible={showSkeleton}>
           <div className="admin-settings-card-loading" aria-hidden="true">
-            <AdminSettingsHeadingSkeleton withStatus />
-            <AdminSettingsFieldSkeleton textareaClassName="admin-settings-textarea-skeleton" />
-            <AdminSettingsActionsSkeleton count={3} />
+            <AdminSettingsCopySkeleton
+              className="source-card-heading"
+              description={maintenanceText.telegramDescription}
+              title={maintenanceText.telegramTitle}
+              withStatus
+            />
+            <div className="turnstile-config-help">
+              <AdminSettingsTextMask>
+                {`TGTOKEN = ${maintenanceText.telegramTokenLabel}`}
+              </AdminSettingsTextMask>
+            </div>
+            <AdminSettingsFieldSkeleton />
+            <AdminSettingsFieldSkeleton />
+            <AdminSettingsActionsSkeleton count={2} />
           </div>
         </SkeletonVisibility>
       </article>
@@ -8167,16 +8081,24 @@ function TelegramSettingsCard({
       <div className="source-card-heading">
         <h3>{maintenanceText.telegramTitle}</h3>
         <SettingsStatusBadge
+          ariaDescribedBy="telegram-settings-description telegram-settings-configuration"
+          disabled={saving || testing || !settings.available}
           disabledLabel={settings.available
             ? maintenanceText.telegramDisabled
             : maintenanceText.telegramUnavailable}
           enabled={settings.enabled}
           enabledLabel={maintenanceText.telegramEnabled}
+          onChange={(enabled) =>
+            void persist({
+              enabled,
+              target: settings.target,
+              footerMarkdown: settings.footerMarkdown
+            }, false)
+          }
         />
         <p id="telegram-settings-description">{maintenanceText.telegramDescription}</p>
         <div className="turnstile-config-help" id="telegram-settings-configuration">
           <span><code>TGTOKEN</code>{` = ${maintenanceText.telegramTokenLabel}`}</span>
-          <span><code>TGID</code>{` = ${maintenanceText.telegramTargetLabel}`}</span>
         </div>
         {!settings.available ? <p>{maintenanceText.telegramNotConfigured}</p> : null}
       </div>
@@ -8214,34 +8136,34 @@ function TelegramSettingsCard({
         className="proxy-settings-form"
         onSubmit={(event) => {
           event.preventDefault();
-          void persist({ enabled: settings.enabled, footerMarkdown }, true);
+          void persist({ enabled: settings.enabled, target, footerMarkdown }, true);
         }}
       >
+        <label className="source-url-field">
+          {maintenanceText.telegramTargetLabel}
+          <input
+            autoComplete="off"
+            disabled={saving || testing}
+            maxLength={40}
+            onChange={(event) => setTarget(event.target.value)}
+            placeholder={maintenanceText.telegramTargetPlaceholder}
+            type="text"
+            value={target}
+          />
+        </label>
         <label className="source-url-field telegram-footer-field">
           {maintenanceText.telegramFooterLabel}
-          <textarea
+          <input
+            autoComplete="off"
             disabled={saving}
             maxLength={1000}
             onChange={(event) => setFooterMarkdown(event.target.value)}
             placeholder={maintenanceText.telegramFooterPlaceholder}
-            rows={1}
+            type="text"
             value={footerMarkdown}
           />
         </label>
         <div className="source-public-actions telegram-settings-actions">
-          <button
-            className="primary-button"
-            disabled={saving || testing || !settings.available}
-            type="button"
-            onClick={() => void persist({
-              enabled: !settings.enabled,
-              footerMarkdown: settings.footerMarkdown
-            }, false)}
-          >
-            {settings.enabled
-              ? maintenanceText.telegramDisable
-              : maintenanceText.telegramEnable}
-          </button>
           <button
             className="ghost-button"
             disabled={saving || testing || !dirty}
@@ -8448,37 +8370,60 @@ function HomeHeroSettingsSkeleton() {
   );
 }
 
-function ProxySettingsCardSkeleton() {
+function ProxySettingsCardSkeleton({
+  maintenanceText
+}: {
+  maintenanceText: ReturnType<typeof getAdminMaintenanceText>;
+}) {
   return (
     <div className="admin-settings-card-loading" aria-hidden="true">
-      <AdminSettingsHeadingSkeleton withStatus />
+      <AdminSettingsCopySkeleton
+        className="source-card-heading"
+        description={maintenanceText.proxyDescription}
+        title={maintenanceText.proxyTitle}
+        withStatus
+      />
       <div className="proxy-settings-form">
         <AdminSettingsFieldSkeleton />
         <AdminSettingsFieldSkeleton />
         <AdminSettingsFieldSkeleton />
         <span className="skeleton-shimmer skeleton-line is-long admin-settings-help-skeleton" />
         <span className="skeleton-shimmer skeleton-line is-medium admin-settings-help-skeleton" />
-        <AdminSettingsActionsSkeleton />
+        <AdminSettingsActionsSkeleton count={1} />
       </div>
     </div>
   );
 }
 
-function FactoryResetCardSkeleton() {
+function FactoryResetCardSkeleton({
+  maintenanceText
+}: {
+  maintenanceText: ReturnType<typeof getAdminMaintenanceText>;
+}) {
   return (
     <div className="admin-settings-card-loading" aria-hidden="true">
-      <AdminSettingsHeadingSkeleton />
-      <span className="skeleton-shimmer skeleton-line is-long admin-settings-help-skeleton" />
+      <div className="admin-settings-copy-skeleton">
+        <h3><AdminSettingsTextMask>{maintenanceText.resetTitle}</AdminSettingsTextMask></h3>
+        <p><AdminSettingsTextMask>{maintenanceText.resetDescription}</AdminSettingsTextMask></p>
+        <p><AdminSettingsTextMask>{maintenanceText.resetWarning}</AdminSettingsTextMask></p>
+      </div>
       <AdminSettingsActionsSkeleton count={1} />
     </div>
   );
 }
 
-function BackupRestoreCardSkeleton() {
+function BackupRestoreCardSkeleton({
+  maintenanceText
+}: {
+  maintenanceText: ReturnType<typeof getAdminMaintenanceText>;
+}) {
   return (
     <div className="admin-settings-card-loading" aria-hidden="true">
-      <AdminSettingsHeadingSkeleton />
-      <span className="skeleton-shimmer skeleton-line is-long admin-settings-help-skeleton" />
+      <div className="admin-settings-copy-skeleton">
+        <h3><AdminSettingsTextMask>{maintenanceText.backupTitle}</AdminSettingsTextMask></h3>
+        <p><AdminSettingsTextMask>{maintenanceText.backupDescription}</AdminSettingsTextMask></p>
+        <p><AdminSettingsTextMask>{maintenanceText.backupHelp}</AdminSettingsTextMask></p>
+      </div>
       <div className="source-public-actions">
         <span className="skeleton-shimmer admin-settings-button-skeleton" />
         <span className="skeleton-shimmer admin-settings-button-skeleton is-secondary" />
@@ -10288,12 +10233,12 @@ function AdminSystemSettingsPanel({
   const termsPageBusy = termsSaving || termsResetting;
   const footerSettingsBusy = footerSaving || footerResetting;
   const homeHeroBusy = homeSaving || homeResetting;
-  const showSiteSettingsSkeleton = useLoadingSkeleton(siteSettingsLoading);
-  const showProxySettingsSkeleton = useLoadingSkeleton(proxySettingsLoading);
-  const showSourceSettingsSkeleton = useLoadingSkeleton(sourceSettingsLoading);
-  const showTurnstileSettingsSkeleton = useLoadingSkeleton(turnstileSettingsLoading);
-  const showUmamiSettingsSkeleton = useLoadingSkeleton(umamiSettingsLoading);
-  const showSecuritySettingsSkeleton = useLoadingSkeleton(securitySettingsLoading);
+  const showSiteSettingsSkeleton = useLoadingSkeleton(siteSettingsLoading, 0);
+  const showProxySettingsSkeleton = useLoadingSkeleton(proxySettingsLoading, 0);
+  const showSourceSettingsSkeleton = useLoadingSkeleton(sourceSettingsLoading, 0);
+  const showTurnstileSettingsSkeleton = useLoadingSkeleton(turnstileSettingsLoading, 0);
+  const showUmamiSettingsSkeleton = useLoadingSkeleton(umamiSettingsLoading, 0);
+  const showSecuritySettingsSkeleton = useLoadingSkeleton(securitySettingsLoading, 0);
 
   const settingsGroups: Array<{
     id: AdminSystemSettingsGroup;
@@ -10804,9 +10749,13 @@ function AdminSystemSettingsPanel({
           {sourceSettingsLoading ? (
             <SkeletonVisibility visible={showSourceSettingsSkeleton}>
               <div className="admin-settings-card-loading" aria-hidden="true">
-                <AdminSettingsHeadingSkeleton withStatus />
+                <AdminSettingsCopySkeleton
+                  className="source-card-heading"
+                  description={maintenanceText.publicDescription}
+                  title={maintenanceText.publicTitle}
+                  withStatus
+                />
                 <AdminSettingsFieldSkeleton />
-                <AdminSettingsActionsSkeleton count={1} />
               </div>
             </SkeletonVisibility>
           ) : sourceSettingsError ? (
@@ -10826,9 +10775,12 @@ function AdminSystemSettingsPanel({
           <div className="source-card-heading">
             <h3>{maintenanceText.publicTitle}</h3>
             <SettingsStatusBadge
+              ariaDescribedBy="public-source-description"
+              disabled={sourceSettingsLoading || sourceSettingsSaving}
               disabledLabel={maintenanceText.publicDisabled}
               enabled={publicSourceEnabled}
               enabledLabel={maintenanceText.publicEnabled}
+              onChange={() => void togglePublicSource()}
             />
             <p id="public-source-description">{maintenanceText.publicDescription}</p>
           </div>
@@ -10841,19 +10793,6 @@ function AdminSystemSettingsPanel({
               value={publicSourceUrl}
             />
           </label>
-          <div className="source-public-actions">
-            <button
-              className="primary-button"
-              aria-describedby="public-source-description"
-              disabled={sourceSettingsLoading || sourceSettingsSaving}
-              type="button"
-              onClick={() => void togglePublicSource()}
-            >
-              {publicSourceEnabled
-                ? maintenanceText.publicDisable
-                : maintenanceText.publicEnable}
-            </button>
-          </div>
           </>
           )}
           </article>
@@ -10872,11 +10811,16 @@ function AdminSystemSettingsPanel({
           {umamiSettingsLoading ? (
             <SkeletonVisibility visible={showUmamiSettingsSkeleton}>
               <div className="admin-settings-card-loading" aria-hidden="true">
-                <AdminSettingsHeadingSkeleton withStatus />
+                <AdminSettingsCopySkeleton
+                  className="source-card-heading"
+                  description={maintenanceText.umamiDescription}
+                  title={maintenanceText.umamiTitle}
+                  withStatus
+                />
                 <form className="proxy-settings-form">
                   <AdminSettingsFieldSkeleton />
                   <AdminSettingsFieldSkeleton />
-                  <AdminSettingsActionsSkeleton />
+                  <AdminSettingsActionsSkeleton count={1} />
                 </form>
               </div>
             </SkeletonVisibility>
@@ -10897,9 +10841,18 @@ function AdminSystemSettingsPanel({
               <div className="source-card-heading">
                 <h3>{maintenanceText.umamiTitle}</h3>
                 <SettingsStatusBadge
+                  ariaDescribedBy="umami-settings-description"
+                  disabled={
+                    umamiSettingsSaving ||
+                    (!umamiSettings?.enabled &&
+                      !hasCompleteUmamiSettings(
+                        umamiSettings ?? { scriptUrl: "", websiteId: "" }
+                      ))
+                  }
                   disabledLabel={maintenanceText.umamiDisabled}
                   enabled={umamiSettings?.enabled ?? false}
                   enabledLabel={maintenanceText.umamiEnabled}
+                  onChange={() => toggleUmami()}
                 />
                 <p id="umami-settings-description">
                   {maintenanceText.umamiDescription}
@@ -10944,25 +10897,6 @@ function AdminSystemSettingsPanel({
                 </label>
                 <div className="source-public-actions">
                   <button
-                    className="primary-button"
-                    disabled={
-                      umamiSettingsSaving ||
-                      (!umamiSettings?.enabled &&
-                        !hasCompleteUmamiSettings(
-                          umamiSettings ?? {
-                            scriptUrl: "",
-                            websiteId: ""
-                          }
-                        ))
-                    }
-                    type="button"
-                    onClick={toggleUmami}
-                  >
-                    {umamiSettings?.enabled
-                      ? maintenanceText.umamiDisable
-                      : maintenanceText.umamiEnable}
-                  </button>
-                  <button
                     className="ghost-button"
                     disabled={umamiSettingsSaving || !umamiSettingsDirty}
                     type="submit"
@@ -10982,10 +10916,20 @@ function AdminSystemSettingsPanel({
           {turnstileSettingsLoading ? (
             <SkeletonVisibility visible={showTurnstileSettingsSkeleton}>
               <div className="admin-settings-card-loading" aria-hidden="true">
-                <AdminSettingsHeadingSkeleton withStatus />
-                <span className="skeleton-shimmer skeleton-line is-long admin-settings-help-skeleton" />
-                <span className="skeleton-shimmer skeleton-line is-medium admin-settings-help-skeleton" />
-                <AdminSettingsActionsSkeleton count={1} />
+                <AdminSettingsCopySkeleton
+                  className="source-card-heading"
+                  description={maintenanceText.turnstileDescription}
+                  title={maintenanceText.turnstileTitle}
+                  withStatus
+                />
+                <div className="turnstile-config-help">
+                  <AdminSettingsTextMask>
+                    {`TURNSTILE_SITE_KEY = ${maintenanceText.turnstileSiteKeyLabel}`}
+                  </AdminSettingsTextMask>
+                  <AdminSettingsTextMask>
+                    {`TURNSTILE_SECRET_KEY = ${maintenanceText.turnstileSecretKeyLabel}`}
+                  </AdminSettingsTextMask>
+                </div>
               </div>
             </SkeletonVisibility>
           ) : turnstileSettingsError ? (
@@ -11001,11 +10945,16 @@ function AdminSystemSettingsPanel({
               <div className="source-card-heading">
                 <h3>{maintenanceText.turnstileTitle}</h3>
                 <SettingsStatusBadge
+                  ariaDescribedBy="turnstile-settings-description turnstile-settings-configuration"
+                  disabled={
+                    turnstileSettingsSaving || !turnstileSettings?.available
+                  }
                   disabledLabel={turnstileSettings?.available
                     ? maintenanceText.turnstileDisabled
                     : maintenanceText.turnstileUnavailable}
                   enabled={turnstileSettings?.enabled ?? false}
                   enabledLabel={maintenanceText.turnstileEnabled}
+                  onChange={() => void toggleTurnstile()}
                 />
                 <p id="turnstile-settings-description">{maintenanceText.turnstileDescription}</p>
                 <div className="turnstile-config-help" id="turnstile-settings-configuration">
@@ -11019,19 +10968,6 @@ function AdminSystemSettingsPanel({
                   </span>
                 </div>
                 {!turnstileSettings?.available ? <p>{maintenanceText.turnstileNotConfigured}</p> : null}
-              </div>
-              <div className="source-public-actions">
-                <button
-                  aria-describedby="turnstile-settings-description turnstile-settings-configuration"
-                  className="primary-button"
-                  disabled={turnstileSettingsSaving || !turnstileSettings?.available}
-                  type="button"
-                  onClick={() => void toggleTurnstile()}
-                >
-                  {turnstileSettings?.enabled
-                    ? maintenanceText.turnstileDisable
-                    : maintenanceText.turnstileEnable}
-                </button>
               </div>
             </>
           )}
@@ -11051,7 +10987,7 @@ function AdminSystemSettingsPanel({
           <article className="source-public-card proxy-settings-card">
           {proxySettingsLoading ? (
             <SkeletonVisibility visible={showProxySettingsSkeleton}>
-              <ProxySettingsCardSkeleton />
+              <ProxySettingsCardSkeleton maintenanceText={maintenanceText} />
             </SkeletonVisibility>
           ) : proxySettingsError ? (
             <div className="settings-card-error" role="alert">
@@ -11070,9 +11006,15 @@ function AdminSystemSettingsPanel({
           <div className="source-card-heading">
             <h3>{maintenanceText.proxyTitle}</h3>
             <SettingsStatusBadge
+              ariaDescribedBy="proxy-settings-description proxy-settings-help"
+              disabled={
+                proxySaving ||
+                (!proxyEnabled && !normalizeProxyBaseUrl(proxySettings.baseUrl))
+              }
               disabledLabel={maintenanceText.proxyDisabled}
               enabled={proxyEnabled}
               enabledLabel={maintenanceText.proxyEnabled}
+              onChange={toggleProxy}
             />
             <p id="proxy-settings-description">{maintenanceText.proxyDescription}</p>
           </div>
@@ -11146,20 +11088,6 @@ function AdminSystemSettingsPanel({
             </div>
             <div className="source-public-actions">
               <button
-                className="primary-button"
-                disabled={
-                  proxySaving ||
-                  (!proxyEnabled &&
-                    !normalizeProxyBaseUrl(proxySettings.baseUrl))
-                }
-                type="button"
-                onClick={toggleProxy}
-              >
-                {proxyEnabled
-                  ? maintenanceText.proxyDisable
-                  : maintenanceText.proxyEnable}
-              </button>
-              <button
                 className="ghost-button"
                 disabled={proxySaving || !proxySettingsDirty}
                 type="submit"
@@ -11186,7 +11114,10 @@ function AdminSystemSettingsPanel({
           {securitySettingsLoading ? (
             <SkeletonVisibility visible={showSecuritySettingsSkeleton}>
               <div className="admin-settings-card-loading" aria-hidden="true">
-                <AdminSettingsHeadingSkeleton />
+                <AdminSettingsCopySkeleton
+                  description={maintenanceText.securityDescription}
+                  title={maintenanceText.securityTitle}
+                />
                 <form className="admin-security-form">
                   <AdminSettingsFieldSkeleton />
                   <AdminSettingsFieldSkeleton />
@@ -11293,7 +11224,7 @@ function AdminSystemSettingsPanel({
           <article className="source-public-card factory-reset-card">
           {securitySettingsLoading ? (
             <SkeletonVisibility visible={showSecuritySettingsSkeleton}>
-              <FactoryResetCardSkeleton />
+              <FactoryResetCardSkeleton maintenanceText={maintenanceText} />
             </SkeletonVisibility>
           ) : (
           <>
@@ -11322,7 +11253,7 @@ function AdminSystemSettingsPanel({
           <article className="source-public-card backup-restore-card">
           {securitySettingsLoading ? (
             <SkeletonVisibility visible={showSecuritySettingsSkeleton}>
-              <BackupRestoreCardSkeleton />
+              <BackupRestoreCardSkeleton maintenanceText={maintenanceText} />
             </SkeletonVisibility>
           ) : (
           <>
@@ -12384,8 +12315,10 @@ function Dialog({
   const returnFocusTargetRef = useRef<DialogReturnFocusTarget | undefined>(
     undefined
   );
+  const restoreFocusOnCloseRef = useRef(true);
 
   if (returnFocusTargetRef.current === undefined) {
+    restoreFocusOnCloseRef.current = getLastInputModality() === "keyboard";
     returnFocusTargetRef.current =
       consumeNextDialogReturnFocus() ??
       getDialogReturnFocusTarget(document.activeElement);
@@ -12476,7 +12409,11 @@ function Dialog({
         const topDialog = visibleDialogs.at(-1);
 
         if (adminDialogStack.length > 0 && topDialog) {
-          if (element?.isConnected && topDialog.contains(element)) {
+          if (
+            restoreFocusOnCloseRef.current &&
+            element?.isConnected &&
+            topDialog.contains(element)
+          ) {
             element.focus({ preventScroll: true });
           } else if (!topDialog.contains(document.activeElement)) {
             getDialogInitialFocus(topDialog).focus({ preventScroll: true });
@@ -12484,7 +12421,7 @@ function Dialog({
           return;
         }
 
-        if (element?.isConnected) {
+        if (restoreFocusOnCloseRef.current && element?.isConnected) {
           element.focus({ preventScroll: true });
         }
       });
@@ -12597,6 +12534,8 @@ function Dialog({
     if (adminDialogStack.at(-1) !== dialogIdRef.current) {
       return;
     }
+
+    restoreFocusOnCloseRef.current = true;
 
     if (event.key === "Escape") {
       event.preventDefault();

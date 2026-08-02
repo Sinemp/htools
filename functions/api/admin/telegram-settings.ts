@@ -27,6 +27,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const payload = (await request.json()) as {
       enabled?: unknown;
+      target?: unknown;
       footerMarkdown?: unknown;
     };
     return json({ settings: await saveTelegramSettings(env, payload) });

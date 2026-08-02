@@ -62,26 +62,13 @@ The D1 schema is initialized or upgraded automatically on first API access; no m
 
 The application reads the following environment variables:
 
-| Variable | Required | Recommended type | Purpose |
+| Variable | Required | Recommended type | Description |
 | --- | --- | --- | --- |
 | `ADMIN_PASSWORD` | Yes | Secret | Admin password and session-signing secret; use a unique password of at least 12 characters. |
-| `GITHUB_TOKEN` | No | Secret | Reads public GitHub repository metadata while adding or editing tools and raises the GitHub API request limit. |
-| `TURNSTILE_SITE_KEY` | No; configure together with the secret key | Plain variable | Cloudflare Turnstile Site Key used to load the widget on the administrator login page. |
-| `TURNSTILE_SECRET_KEY` | No; configure together with the site key | Secret | Cloudflare Turnstile Secret Key used by the server to verify challenge results. |
-| `TGTOKEN` | No; configure together with `TGID` | Secret | Telegram Bot Token used for administrator-triggered tool or article pushes. |
-| `TGID` | No; configure together with `TGTOKEN` | Plain variable | Telegram recipient; accepts a user, private group, supergroup, or channel numeric ID, or a public channel username. |
-
-Use a read-only `GITHUB_TOKEN` without repository write, delete, or administration permissions. Without it, the admin browser requests GitHub's public API directly. The public submission page always uses the visitor's browser and never uses the site token.
-
-To use Turnstile, add the deployed domain in Cloudflare, configure both keys, redeploy, and enable it under Admin → Service Settings.
-
-To use Telegram pushing, add the bot to the target chat with permission to send messages, configure `TGTOKEN` and `TGID`, redeploy, then test and enable it under Admin → Service Settings. The fixed Markdown footer is configured there. Every push is triggered manually by an administrator; creating, editing, importing, or synchronizing content never sends automatically.
-
-There are two entry points: click the Telegram icon on a tool or article card and choose “Push now” or “Save draft”, or open Admin → Message Push and click “Add Push” to write a standalone message that is not tied to any tool or article. Bodies are written in Markdown and converted to the HTML subset Telegram supports — bold, italic, strikethrough, quotes, code, and links. **Markdown headings render as bold text, tables are not supported**, and a complete message is limited to 4096 characters.
-
-A tool preview or article cover is prefilled, but image sending starts disabled; articles without a cover do not generate a substitute screenshot. “Save” stores the current content only, while “Push” or “Update” creates or edits the Telegram message. If the original message was deleted, keep the body and image while rebuilding the push; if permissions are denied, update the bot permissions and retry.
-
-Admin → Message Push manages every record, including drafts that have not been sent, with search, type filters, preview, editing, pushing, and deletion. Loading the page reads D1 only and never contacts Telegram. **Deleting a record removes local data only and never deletes the message already sent to Telegram** — withdraw it in Telegram yourself if needed. After sending you can still edit the content and update the same message, but it cannot go back to draft.
+| `GITHUB_TOKEN` | No | Secret | Raises the limit for admin-side public repository metadata requests. Use a read-only token without write, delete, or administration permissions; without it, the admin browser requests GitHub directly. |
+| `TURNSTILE_SITE_KEY` | No; configure together with the secret key | Plain variable | Turnstile Site Key for the administrator login page; configure it together with the secret key. |
+| `TURNSTILE_SECRET_KEY` | No; configure together with the site key | Secret | Verifies Turnstile results on the server. Add the deployed domain, redeploy, then enable it in the dashboard. |
+| `TGTOKEN` | No | Secret | Telegram Bot Token. After redeploying, set the recipient, test the connection, and enable it in the dashboard. Pushes are always triggered manually by an administrator. |
 
 ## Local Development
 
