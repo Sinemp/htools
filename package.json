@@ -1,6 +1,6 @@
 {
   "name": "htools",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,13 +22,14 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260620.0",
+    "@cloudflare/workers-types": "^5.20260801.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "postcss": "^8.5.25",
     "typescript": "^5.9.2",
     "vite": "^7.2.7",
-    "wrangler": "^4.55.0"
+    "wrangler": "^4.118.0"
   },
   "overrides": {
     "esbuild": "0.28.1"
