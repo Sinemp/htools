@@ -1,6 +1,6 @@
 # HTools
 
-HTools is an open-source tool directory built on Cloudflare Pages Functions and D1, with a public tool library, articles, and an RSS content dashboard.
+HTools is an open-source tool directory platform powered by Cloudflare Pages Functions and D1, combining tool curation, article management, RSS aggregation, and Telegram message delivery—without a traditional server.
 
 <p align="center">
   <a href="https://pages.cloudflare.com/"><img src="https://img.shields.io/badge/Cloudflare-F38020?logo=cloudflare&amp;logoColor=white&amp;labelColor=555" alt="Cloudflare" /></a>

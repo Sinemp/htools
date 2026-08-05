@@ -4808,36 +4808,34 @@ export default function AdminApp({
                 rows={4}
                 value={telegramDescription}
               />
-              <AdminUrlField
-                disabled={telegramMessageLoading || telegramMessageSaving}
+              {telegramResource.type !== "content" ? (
+                <AdminUrlField
+                  disabled={telegramMessageLoading || telegramMessageSaving}
                   label={
                     telegramResource.type === "article"
                       ? (locale === "zh" ? "文章地址" : "Article URL")
-                      : telegramResource.type === "content"
-                        ? telegramText.contentUrlLabel
-                        : t.form.url
+                      : t.form.url
                   }
-                onChange={(url) => {
-                  if (url !== telegramUrl) telegramGitHub.reset(url);
-                  setTelegramUrl(url);
-                  setTelegramBodyMarkdown((current) =>
-                    syncTelegramBodyField(
-                      current,
-                      { url, resourceType: telegramResource.type },
-                      telegramSettings.footerMarkdown,
-                      locale
-                    )
-                  );
-                }}
-                placeholder={
-                  telegramResource.type === "article"
-                    ? telegramText.articleUrlPlaceholder
-                    : telegramResource.type === "content"
-                      ? telegramText.contentUrlPlaceholder
+                  onChange={(url) => {
+                    if (url !== telegramUrl) telegramGitHub.reset(url);
+                    setTelegramUrl(url);
+                    setTelegramBodyMarkdown((current) =>
+                      syncTelegramBodyField(
+                        current,
+                        { url, resourceType: telegramResource.type },
+                        telegramSettings.footerMarkdown,
+                        locale
+                      )
+                    );
+                  }}
+                  placeholder={
+                    telegramResource.type === "article"
+                      ? telegramText.articleUrlPlaceholder
                       : t.form.urlPlaceholder
-                }
-                value={telegramUrl}
-              />
+                  }
+                  value={telegramUrl}
+                />
+              ) : null}
               <AdminUrlField
                 disabled={telegramMessageLoading || telegramMessageSaving}
                 label={

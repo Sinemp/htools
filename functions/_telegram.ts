@@ -968,14 +968,12 @@ export function buildTelegramMessageMarkdown(
   const labels = locale === "zh"
     ? {
         article: "文章地址",
-        content: "本站浏览",
         project: "项目地址",
         demo: "演示地址",
         original: "原文地址"
       }
     : {
         article: "Article",
-        content: "Site View",
         project: "Project",
         demo: "Demo",
         original: "Original"
@@ -987,15 +985,12 @@ export function buildTelegramMessageMarkdown(
       .map(toTelegramHashtag)
       .filter(Boolean)
       .join(" ");
-  const linkLabel = resource.type === "article"
-    ? labels.article
-    : resource.type === "content"
-      ? labels.content
-      : labels.project;
+  const linkLabel = resource.type === "article" ? labels.article : labels.project;
   const demoLabel = resource.type === "content" ? labels.original : labels.demo;
+  const resourceUrl = resource.type === "content" ? "" : resource.url;
   const sections = [
     editableBody,
-    resource.url ? `${linkLabel}：[${resource.url}](${resource.url})` : "",
+    resourceUrl ? `${linkLabel}：[${resourceUrl}](${resourceUrl})` : "",
     resource.demoUrl ? `${demoLabel}：[${resource.demoUrl}](${resource.demoUrl})` : "",
     tags,
     footerMarkdown.trim()
@@ -1617,28 +1612,16 @@ async function loadTelegramResource(
   }
 
   if (type === "content") {
-    const item = await db.prepare(
-      `SELECT content_items.*,
-              articles.slug AS linked_article_slug,
-              articles.published AS linked_article_published
-       FROM content_items
-       LEFT JOIN articles ON articles.id = content_items.article_id
-       WHERE content_items.id = ?`
-    )
+    const item = await db.prepare("SELECT * FROM content_items WHERE id = ?")
       .bind(id)
       .first<ContentItemRow>();
     if (!item) throw new InvalidRequestError("Content item not found.");
-    const browsePath = item.linked_article_slug
-      ? `/articles/${encodeURIComponent(item.linked_article_slug)}${
-          item.linked_article_published === 1 ? "" : "?preview=1"
-        }`
-      : `/articles/content-preview?contentItem=${encodeURIComponent(item.id)}`;
     return {
       type,
       id: item.id,
       title: item.title,
       description: item.summary,
-      url: resolveTelegramPublicUrl(browsePath, origin),
+      url: "",
       demoUrl: resolveTelegramPublicUrl(item.url, origin),
       image: resolveTelegramPublicUrl(item.cover_image, origin),
       category: "",

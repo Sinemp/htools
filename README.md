@@ -1,6 +1,6 @@
 # HTools
 
-HTools 是一款部署在 Cloudflare Pages Functions + D1 上的开源工具导航站，可用于搭建工具库、文章页和内容流聚合后台。
+HTools 是一款运行于 Cloudflare Pages Functions + D1 的开源工具导航平台，集工具收录、文章管理、RSS 内容聚合与 Telegram 消息推送于一体，无需部署传统服务器。
 
 <p align="center">
   <a href="https://pages.cloudflare.com/"><img src="https://img.shields.io/badge/Cloudflare-F38020?logo=cloudflare&amp;logoColor=white&amp;labelColor=555" alt="Cloudflare" /></a>

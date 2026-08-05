@@ -1,6 +1,5 @@
 import {
   createArticleBrowseHref,
-  createContentItemPreviewHref,
   getContentItemPreviewImage
 } from "./admin-display";
 import { ADMIN_RESOURCE_FIELD_EXAMPLES } from "./admin-field-examples";
@@ -90,20 +89,17 @@ export function syncTelegramBodyField(
   }
   if (Object.prototype.hasOwnProperty.call(patch, "url")) {
     const label = locale === "zh"
-      ? patch.resourceType === "article"
-        ? "文章地址"
-        : patch.resourceType === "content"
-          ? "本站浏览"
-          : "项目地址"
+      ? patch.resourceType === "article" ? "文章地址" : "项目地址"
       : patch.resourceType === "article"
         ? "Article"
-        : patch.resourceType === "content"
-          ? "Site View"
-          : "Project";
+        : "Project";
     lines = replaceTelegramLabeledLine(
       lines,
       /^(项目地址|文章地址|本站浏览|Project|Article|Site View|Repository)[：:]/i,
-      createTelegramUrlLine(label, patch.url ?? ""),
+      createTelegramUrlLine(
+        label,
+        patch.resourceType === "content" ? "" : patch.url ?? ""
+      ),
       /^(演示地址|原文地址|Demo|Original)[：:]/i
     );
   }
@@ -335,16 +331,12 @@ export function createTelegramContentResource(
   item: ContentItemSummary,
   origin: string
 ): TelegramPushResource {
-  const browseHref = item.articleId && item.articleSlug
-    ? createArticleBrowseHref(item.articleSlug, item.articlePublished)
-    : createContentItemPreviewHref(item.id);
-
   return {
     type: "content",
     id: item.id,
     title: getArticleDisplayTitle(item),
     description: item.summary,
-    url: resolveTelegramResourceUrl(browseHref, origin),
+    url: "",
     demoUrl: resolveTelegramResourceUrl(item.url, origin),
     image: resolveTelegramResourceUrl(getContentItemPreviewImage(item), origin),
     category: "",
@@ -376,14 +368,12 @@ export function buildTelegramPreviewMarkdown(
   const labels = locale === "zh"
     ? {
         article: "文章地址",
-        content: "本站浏览",
         project: "项目地址",
         demo: "演示地址",
         original: "原文地址"
       }
     : {
         article: "Article",
-        content: "Site View",
         project: "Project",
         demo: "Demo",
         original: "Original"
@@ -392,16 +382,13 @@ export function buildTelegramPreviewMarkdown(
   const tags = resource.type === "custom"
     ? ""
     : resource.tags.map(toTelegramHashtag).filter(Boolean).join(" ");
-  const linkLabel = resource.type === "article"
-    ? labels.article
-    : resource.type === "content"
-      ? labels.content
-      : labels.project;
+  const linkLabel = resource.type === "article" ? labels.article : labels.project;
   const demoLabel = resource.type === "content" ? labels.original : labels.demo;
+  const resourceUrl = resource.type === "content" ? "" : resource.url;
 
   return [
     editableBody,
-    resource.url ? `${linkLabel}：[${resource.url}](${resource.url})` : "",
+    resourceUrl ? `${linkLabel}：[${resourceUrl}](${resourceUrl})` : "",
     resource.demoUrl ? `${demoLabel}：[${resource.demoUrl}](${resource.demoUrl})` : "",
     tags,
     footerMarkdown.trim()
@@ -483,9 +470,7 @@ export function getTelegramText(locale: Locale) {
         categoryLabel: "推送分类",
         syncSource: "同步来源",
         syncSourceHint: "同步关联工具、文章或内容流的最新信息，当前编辑内容将被覆盖。",
-        contentUrlLabel: "本站浏览",
         contentOriginalUrlLabel: "原文地址",
-        contentUrlPlaceholder: "例如：https://example.com/articles/content-preview",
         contentOriginalUrlPlaceholder: "例如：https://example.com/article",
         projectUrlPlaceholder: "https://example.com",
         articleUrlPlaceholder: "例如：https://example.com/articles/article-name",
@@ -571,9 +556,7 @@ export function getTelegramText(locale: Locale) {
         categoryLabel: "Push category",
         syncSource: "Sync Source",
         syncSourceHint: "Sync the latest information from the linked tool, article, or content item. Your current edits will be overwritten.",
-        contentUrlLabel: "Site View",
         contentOriginalUrlLabel: "Original URL",
-        contentUrlPlaceholder: "Example: https://example.com/articles/content-preview",
         contentOriginalUrlPlaceholder: "Example: https://example.com/article",
         projectUrlPlaceholder: "https://example.com",
         articleUrlPlaceholder: "Example: https://example.com/articles/article-name",

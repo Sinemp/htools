@@ -1886,7 +1886,7 @@ async function backfillTelegramMessageResources(db: D1Database) {
                'type', 'content', 'id', content_items.id,
                'title', content_items.title,
                'description', content_items.summary,
-               'url', '/articles/content-preview?contentItem=' || content_items.id,
+               'url', '',
                'demoUrl', content_items.url,
                'image', content_items.cover_image,
                'category', '', 'tags',
