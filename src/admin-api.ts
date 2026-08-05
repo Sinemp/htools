@@ -1,5 +1,14 @@
-import { readJson, requestJsonWithTimeout } from "./api-client";
+import {
+  confirmTimedOutWrite,
+  readJson,
+  requestJsonWithTimeout,
+  TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+} from "./api-client";
 export { loadProxySettings, loadSiteConfiguration, loadSiteSettings } from "./public-api";
+import {
+  loadProxySettings as readProxySettings,
+  loadSiteSettings as readSiteSettings
+} from "./public-api";
 import type {
   AdminCategoryAction,
   AdminCategoryActionResult,
@@ -33,6 +42,8 @@ import type {
   TelegramResourceType,
   TelegramSettings,
   TelegramMessage,
+  TelegramPushResource,
+  TelegramSourceState,
   UmamiSettings,
   Tool,
   ToolSourceItem,
@@ -41,6 +52,20 @@ import type {
   ToolInput
 } from "./types";
 import { loadBrowserGitHubMetadata } from "./github-metadata";
+import {
+  normalizeProxyBaseUrl,
+  normalizeProxyMode,
+  normalizeProxyScope
+} from "./proxy";
+import {
+  normalizeUmamiScriptUrl,
+  normalizeUmamiWebsiteId
+} from "./umami";
+import { normalizeTelegramFooterMarkdown } from "./telegram";
+import {
+  DEFAULT_SITE_SETTINGS,
+  getSiteFooterSettings
+} from "./site-helpers";
 
 type ToolsResponse = {
   tools: Tool[];
@@ -144,6 +169,10 @@ type TelegramConnectionResponse = {
 
 type TelegramMessageResponse = {
   message: TelegramMessage;
+};
+
+type TelegramSourceResponse = {
+  source: TelegramSourceState;
 };
 
 type TelegramDeleteResponse = {
@@ -521,15 +550,20 @@ export async function convertContentItemToArticle(
 }
 
 export async function loadAdminCategorySettings(
-  token: string
+  token: string,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<AdminCategorySettings> {
-  const response = await fetch("/api/admin/categories", {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`
-    }
-  });
-  const data = await readJson<AdminCategorySettingsResponse>(response);
+  const data = await requestJsonWithTimeout<AdminCategorySettingsResponse>(
+    "/api/admin/categories",
+    {
+      signal: options.signal,
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`
+      }
+    },
+    { timeoutMs: options.timeoutMs }
+  );
   return data.settings;
 }
 
@@ -537,16 +571,28 @@ export async function saveAdminCategorySettings(
   settings: Partial<Record<AdminCategoryScope, string[]>>,
   token: string
 ): Promise<AdminCategorySettings> {
-  const response = await fetch("/api/admin/categories", {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(settings)
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<AdminCategorySettingsResponse>(
+      "/api/admin/categories",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(settings)
+      }
+    )).settings,
+    confirm: () => loadAdminCategorySettings(token, {
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => Object.entries(settings).every(([scope, categories]) =>
+      sameStringList(
+        current[scope as AdminCategoryScope],
+        Array.isArray(categories) ? categories : []
+      )
+    )
   });
-  const data = await readJson<AdminCategorySettingsResponse>(response);
-  return data.settings;
 }
 
 export async function applyAdminCategoryAction(
@@ -594,7 +640,7 @@ export async function importTools(
 
 export async function loadSourceSettings(
   token: string,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<SourceSettings> {
   const data = await requestJsonWithTimeout<SourceSettingsResponse>(
     "/api/admin/source-settings",
@@ -604,7 +650,8 @@ export async function loadSourceSettings(
         Accept: "application/json",
         Authorization: `Bearer ${token}`
       }
-    }
+    },
+    { timeoutMs: options.timeoutMs }
   );
   return data.settings;
 }
@@ -613,55 +660,72 @@ export async function saveSourceSettings(
   enabled: boolean,
   token: string
 ): Promise<SourceSettings> {
-  const response = await fetch("/api/admin/source-settings", {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ enabled })
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<SourceSettingsResponse>(
+      "/api/admin/source-settings",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ enabled })
+      }
+    )).settings,
+    confirm: () => loadSourceSettings(token, {
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => current.enabled === enabled
   });
-  const data = await readJson<SourceSettingsResponse>(response);
-  return data.settings;
 }
 
 export async function saveProxySettings(
   input: ProxySettings,
   token: string
 ): Promise<ProxySettings> {
-  const response = await fetch("/api/admin/proxy-settings", {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(input)
+  const expected = normalizeProxySettings(input);
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<ProxySettingsResponse>(
+      "/api/admin/proxy-settings",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(input)
+      }
+    )).settings,
+    confirm: () => readProxySettings({
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => sameProxySettings(current, expected)
   });
-  const data = await readJson<ProxySettingsResponse>(response);
-  return data.settings;
 }
 
 export async function loadTurnstileSettings(
   token: string,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<TurnstileSettings> {
   const data = await requestJsonWithTimeout<TurnstileSettingsResponse>(
     "/api/admin/turnstile-settings",
-    { signal: options.signal, headers: { Accept: "application/json", Authorization: `Bearer ${token}` } }
+    { signal: options.signal, headers: { Accept: "application/json", Authorization: `Bearer ${token}` } },
+    { timeoutMs: options.timeoutMs }
   );
   return data.settings;
 }
 
 export async function loadUmamiSettings(
   token: string,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<UmamiSettings> {
   const data = await requestJsonWithTimeout<UmamiSettingsResponse>(
     "/api/admin/umami-settings",
     {
       signal: options.signal,
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` }
-    }
+    },
+    { timeoutMs: options.timeoutMs }
   );
   return data.settings;
 }
@@ -670,41 +734,65 @@ export async function saveUmamiSettings(
   input: UmamiSettings,
   token: string
 ): Promise<UmamiSettings> {
-  const response = await fetch("/api/admin/umami-settings", {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(input)
+  const expected = normalizeUmamiSettings(input);
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<UmamiSettingsResponse>(
+      "/api/admin/umami-settings",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(input)
+      }
+    )).settings,
+    confirm: () => loadUmamiSettings(token, {
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => sameUmamiSettings(current, expected)
   });
-  return (await readJson<UmamiSettingsResponse>(response)).settings;
 }
 
 export async function saveTurnstileSettings(enabled: boolean, token: string) {
-  const response = await fetch("/api/admin/turnstile-settings", {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled })
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<TurnstileSettingsResponse>(
+      "/api/admin/turnstile-settings",
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled })
+      }
+    )).settings,
+    confirm: () => loadTurnstileSettings(token, {
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => current.enabled === enabled
   });
-  return (await readJson<TurnstileSettingsResponse>(response)).settings;
 }
 
 export async function patchSiteSettings(
   input: SiteSettingsPatch,
   token: string
 ): Promise<SiteSettings> {
-  const response = await fetch("/api/admin/site-settings", {
-    cache: "no-store",
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(input)
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<SiteSettingsResponse>(
+      "/api/admin/site-settings",
+      {
+        cache: "no-store",
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(input)
+      }
+    )).settings,
+    confirm: () => readSiteSettings({
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => siteSettingsPatchMatches(current, input)
   });
-  const data = await readJson<SiteSettingsResponse>(response);
-  return data.settings;
 }
 
 export async function exportBackupData(token: string): Promise<HtoolsBackup> {
@@ -795,14 +883,15 @@ export async function updateAdminPassword(
 
 export async function loadTelegramSettings(
   token: string,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<TelegramSettings> {
   const data = await requestJsonWithTimeout<TelegramSettingsResponse>(
     "/api/admin/telegram-settings",
     {
       signal: options.signal,
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` }
-    }
+    },
+    { timeoutMs: options.timeoutMs }
   );
   return data.settings;
 }
@@ -811,23 +900,44 @@ export async function saveTelegramSettings(
   input: Pick<TelegramSettings, "enabled" | "target" | "footerMarkdown">,
   token: string
 ) {
-  const response = await fetch("/api/admin/telegram-settings", {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(input)
+  const expected = normalizeTelegramSettingsInput(input);
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<TelegramSettingsResponse>(
+      "/api/admin/telegram-settings",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(input)
+      }
+    )).settings,
+    confirm: () => loadTelegramSettings(token, {
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => (
+      current.enabled === expected.enabled &&
+      current.target === expected.target &&
+      current.footerMarkdown === expected.footerMarkdown
+    )
   });
-  return (await readJson<TelegramSettingsResponse>(response)).settings;
 }
 
-export async function testTelegramSettings(token: string) {
-  const response = await fetch("/api/admin/telegram-settings/test", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  return (await readJson<TelegramConnectionResponse>(response)).connection;
+export async function testTelegramSettings(target: string, token: string) {
+  const data = await requestJsonWithTimeout<TelegramConnectionResponse>(
+    "/api/admin/telegram-settings/test",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ target })
+    },
+    { timeoutMs: 12_000 }
+  );
+  return data.connection;
 }
 
 export async function loadTelegramMessage(
@@ -850,6 +960,7 @@ export async function loadTelegramPushRecords(
     limit?: number;
     query?: string;
     resourceType?: TelegramResourceType;
+    category?: string;
     sort?: "latest" | "oldest";
   } = {}
 ): Promise<TelegramPushPage> {
@@ -858,13 +969,36 @@ export async function loadTelegramPushRecords(
   if (params.limit) searchParams.set("limit", String(params.limit));
   if (params.query) searchParams.set("q", params.query);
   if (params.resourceType) searchParams.set("type", params.resourceType);
+  if (params.category) searchParams.set("category", params.category);
   if (params.sort) searchParams.set("sort", params.sort);
   const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
-  const response = await fetch(`/api/admin/telegram-messages${suffix}`, {
-    headers: { Accept: "application/json", Authorization: `Bearer ${token}` }
-  });
-  return readJson<TelegramPushPage>(response);
+  return requestJsonWithTimeout<TelegramPushPage>(
+    `/api/admin/telegram-messages${suffix}`,
+    {
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` }
+    },
+    { timeoutMs: 15_000 }
+  );
 }
+
+export async function loadTelegramSource(
+  resourceType: TelegramResourceType,
+  resourceId: string,
+  token: string,
+  locale: "zh" | "en"
+) {
+  const response = await fetch(
+    `/api/admin/telegram-messages/${resourceType}/${encodeURIComponent(resourceId)}/source?locale=${locale}`,
+    { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } }
+  );
+  return (await readJson<TelegramSourceResponse>(response)).source;
+}
+
+type TelegramMessageWriteOptions = {
+  category?: string;
+  title?: string;
+  resource?: TelegramPushResource;
+};
 
 export async function deleteTelegramPush(
   resourceType: TelegramResourceType,
@@ -890,7 +1024,7 @@ export async function sendTelegramMessage(
   mediaUrl: string,
   locale: "zh" | "en",
   token: string,
-  title = ""
+  options: TelegramMessageWriteOptions = {}
 ) {
   const response = await fetch(
     `/api/admin/telegram-messages/${resourceType}/${encodeURIComponent(resourceId)}`,
@@ -900,7 +1034,11 @@ export async function sendTelegramMessage(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ bodyMarkdown, mediaEnabled, mediaUrl, locale, title })
+      body: JSON.stringify({
+        bodyMarkdown, mediaEnabled, mediaUrl, locale,
+        category: options.category ?? "",
+        title: options.title ?? "", resource: options.resource
+      })
     }
   );
   return (await readJson<TelegramMessageResponse>(response)).message;
@@ -914,7 +1052,7 @@ export async function updateTelegramMessage(
   mediaUrl: string,
   locale: "zh" | "en",
   token: string,
-  title = ""
+  options: TelegramMessageWriteOptions = {}
 ) {
   const response = await fetch(
     `/api/admin/telegram-messages/${resourceType}/${encodeURIComponent(resourceId)}`,
@@ -924,7 +1062,11 @@ export async function updateTelegramMessage(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ bodyMarkdown, mediaEnabled, mediaUrl, locale, title })
+      body: JSON.stringify({
+        bodyMarkdown, mediaEnabled, mediaUrl, locale,
+        category: options.category ?? "",
+        title: options.title ?? "", resource: options.resource
+      })
     }
   );
   return (await readJson<TelegramMessageResponse>(response)).message;
@@ -961,7 +1103,7 @@ export async function saveTelegramMessage(
   mediaUrl: string,
   locale: "zh" | "en",
   token: string,
-  title = ""
+  options: TelegramMessageWriteOptions = {}
 ) {
   const response = await fetch(
     `/api/admin/telegram-messages/${resourceType}/${encodeURIComponent(resourceId)}`,
@@ -971,7 +1113,11 @@ export async function saveTelegramMessage(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ bodyMarkdown, mediaEnabled, mediaUrl, locale, title })
+      body: JSON.stringify({
+        bodyMarkdown, mediaEnabled, mediaUrl, locale,
+        category: options.category ?? "",
+        title: options.title ?? "", resource: options.resource
+      })
     }
   );
   return (await readJson<TelegramMessageResponse>(response)).message;
@@ -979,7 +1125,7 @@ export async function saveTelegramMessage(
 
 export async function loadGitHubSettings(
   token: string,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<GitHubSettings> {
   const data = await requestJsonWithTimeout<GitHubSettingsResponse>(
     "/api/admin/github-settings",
@@ -989,7 +1135,8 @@ export async function loadGitHubSettings(
         Accept: "application/json",
         Authorization: `Bearer ${token}`
       }
-    }
+    },
+    { timeoutMs: options.timeoutMs }
   );
   return data.settings;
 }
@@ -998,16 +1145,29 @@ export async function saveGitHubSettings(
   input: GitHubSettingsInput,
   token: string
 ): Promise<GitHubSettings> {
-  const response = await fetch("/api/admin/github-settings", {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(input)
+  const expected = normalizeGitHubSettingsInput(input);
+  return confirmTimedOutWrite({
+    write: async () => (await requestJsonWithTimeout<GitHubSettingsResponse>(
+      "/api/admin/github-settings",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(input)
+      }
+    )).settings,
+    confirm: () => loadGitHubSettings(token, {
+      timeoutMs: TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS
+    }),
+    matches: (current) => (
+      current.enabled === expected.enabled &&
+      current.owner === expected.owner &&
+      current.repo === expected.repo &&
+      sameStringList(current.labels, expected.labels)
+    )
   });
-  const data = await readJson<GitHubSettingsResponse>(response);
-  return data.settings;
 }
 
 const pendingGitHubMetadataRequests = new Map<
@@ -1040,21 +1200,33 @@ export function loadGitHubToolMetadata(
       searchParams.set("refresh", "1");
     }
 
-    const response = await fetch(`/api/admin/github-metadata?${searchParams}`, {
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`
+    try {
+      const data = await requestJsonWithTimeout<GitHubToolMetadataResponse>(
+        `/api/admin/github-metadata?${searchParams}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`
+          }
+        },
+        { timeoutMs: 12_000 }
+      );
+      adminGitHubMetadataMode = "server";
+      return data.metadata;
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "status" in error &&
+        error.status === 409
+      ) {
+        adminGitHubMetadataMode = "browser";
+        return loadBrowserGitHubMetadata(url, {
+          forceRefresh: options.forceRefresh
+        });
       }
-    });
-    if (response.status === 409) {
-      adminGitHubMetadataMode = "browser";
-      return loadBrowserGitHubMetadata(url, {
-        forceRefresh: options.forceRefresh
-      });
+      throw error;
     }
-    const data = await readJson<GitHubToolMetadataResponse>(response);
-    adminGitHubMetadataMode = "server";
-    return data.metadata;
   })();
 
   pendingGitHubMetadataRequests.set(requestKey, request);
@@ -1066,6 +1238,129 @@ export function loadGitHubToolMetadata(
   void request.then(clearPendingRequest, clearPendingRequest);
 
   return request;
+}
+
+function sameStringList(left: string[], right: string[]) {
+  return left.length === right.length &&
+    left.every((value, index) => value === right[index]);
+}
+
+function normalizeProxySettings(settings: ProxySettings): ProxySettings {
+  return {
+    enabled: settings.enabled === true,
+    baseUrl: normalizeProxyBaseUrl(settings.baseUrl),
+    mode: normalizeProxyMode(settings.mode),
+    scope: normalizeProxyScope(settings.scope)
+  };
+}
+
+function sameProxySettings(left: ProxySettings, right: ProxySettings) {
+  const normalizedLeft = normalizeProxySettings(left);
+  return normalizedLeft.enabled === right.enabled &&
+    normalizedLeft.baseUrl === right.baseUrl &&
+    normalizedLeft.mode === right.mode &&
+    normalizedLeft.scope === right.scope;
+}
+
+function normalizeUmamiSettings(settings: UmamiSettings): UmamiSettings {
+  const scriptUrl = normalizeUmamiScriptUrl(settings.scriptUrl);
+  const websiteId = normalizeUmamiWebsiteId(settings.websiteId);
+  return {
+    enabled: settings.enabled === true && Boolean(scriptUrl && websiteId),
+    scriptUrl,
+    websiteId
+  };
+}
+
+function sameUmamiSettings(left: UmamiSettings, right: UmamiSettings) {
+  const normalizedLeft = normalizeUmamiSettings(left);
+  return normalizedLeft.enabled === right.enabled &&
+    normalizedLeft.scriptUrl === right.scriptUrl &&
+    normalizedLeft.websiteId === right.websiteId;
+}
+
+function normalizeGitHubSettingsInput(input: GitHubSettingsInput): GitHubSettings {
+  return {
+    enabled: input.enabled === true,
+    owner: input.owner.trim(),
+    repo: input.repo.trim(),
+    labels: input.labels.map((label) => label.trim()).filter(Boolean).slice(0, 10)
+  };
+}
+
+function normalizeTelegramSettingsInput(
+  input: Pick<TelegramSettings, "enabled" | "target" | "footerMarkdown">
+) {
+  return {
+    enabled: input.enabled === true,
+    target: input.target.trim(),
+    footerMarkdown: normalizeTelegramFooterMarkdown(input.footerMarkdown)
+  };
+}
+
+function sameValue(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function siteSettingsPatchMatches(settings: SiteSettings, patch: SiteSettingsPatch) {
+  if (patch.section === "identity") {
+    const name = patch.name.trim().slice(0, 40) || DEFAULT_SITE_SETTINGS.name;
+    const subtitle = patch.subtitle.trim().slice(0, 60) || DEFAULT_SITE_SETTINGS.subtitle;
+    return settings.name === name &&
+      settings.subtitle === subtitle &&
+      settings.iconUrl === normalizeSiteIconForConfirmation(patch.iconUrl);
+  }
+  if (patch.section === "about") {
+    return sameValue(settings.aboutContent, normalizeLocalizedContent(patch.aboutContent));
+  }
+  if (patch.section === "privacy") {
+    return sameValue(settings.privacyContent, normalizeLocalizedContent(patch.privacyContent));
+  }
+  if (patch.section === "terms") {
+    return sameValue(settings.termsContent, normalizeLocalizedContent(patch.termsContent));
+  }
+  if (patch.section === "home") {
+    return sameValue(settings.homeHero, {
+      zh: normalizeHomeHeroContentForConfirmation(patch.homeHero.zh),
+      en: normalizeHomeHeroContentForConfirmation(patch.homeHero.en)
+    });
+  }
+  return sameValue(
+    getSiteFooterSettings(settings),
+    getSiteFooterSettings({ ...DEFAULT_SITE_SETTINGS, footer: patch.footer })
+  );
+}
+
+function normalizeLocalizedContent(value: { zh: string; en: string }) {
+  return {
+    zh: value.zh.trim().slice(0, 60_000),
+    en: value.en.trim().slice(0, 60_000)
+  };
+}
+
+function normalizeHomeHeroContentForConfirmation(value: {
+  titleTop: string;
+  titleBottom: string;
+  description: string;
+}) {
+  return {
+    titleTop: value.titleTop.trim().slice(0, 80),
+    titleBottom: value.titleBottom.trim().slice(0, 80),
+    description: value.description.trim().slice(0, 240)
+  };
+}
+
+function normalizeSiteIconForConfirmation(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.startsWith("data:")) return trimmed;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : trimmed;
+  } catch {
+    return trimmed;
+  }
 }
 
 export async function checkLinks(

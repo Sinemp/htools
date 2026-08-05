@@ -1,5 +1,7 @@
-import { Wand2 } from "lucide-react";
+import { ArrowUpRight, Wand2 } from "lucide-react";
 import {
+  type ButtonHTMLAttributes,
+  type MouseEventHandler,
   type ReactNode,
   createContext,
   useContext,
@@ -21,6 +23,56 @@ export function useSiteSettings() {
   }
 
   return settings;
+}
+
+export function PublicGlowAction({
+  children,
+  className = "",
+  disabled = false,
+  href,
+  onClick,
+  showArrow = true,
+  type = "button"
+}: {
+  children: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  href?: string;
+  onClick?: MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>;
+  showArrow?: boolean;
+  type?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
+}) {
+  const content = (
+    <>
+      <span>{children}</span>
+      {showArrow ? <ArrowUpRight aria-hidden="true" size={17} /> : null}
+    </>
+  );
+  const actionClassName = `primary-button public-glow-action ${className}`.trim();
+
+  if (href) {
+    return (
+      <a
+        aria-disabled={disabled || undefined}
+        className={actionClassName}
+        href={disabled ? undefined : href}
+        onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      className={actionClassName}
+      disabled={disabled}
+      type={type}
+      onClick={onClick as MouseEventHandler<HTMLButtonElement> | undefined}
+    >
+      {content}
+    </button>
+  );
 }
 
 export function isSiteIconDataUrl(value: string) {
@@ -229,20 +281,28 @@ export function CompactTagRow({
   return (
     <div className="tag-row-shell">
       <div className="tag-row" ref={rowRef}>
-        {visibleTags.map((tag, index) => (
-          <span className="tag" key={`${tag}-${index}`}>
-            {tag}
-          </span>
-        ))}
+        {visibleTags.map((tag, index) => {
+          const displayTag = tag.trim().replace(/^#+/, "");
+
+          return (
+            <span className="tag" key={`${displayTag}-${index}`}>
+              {displayTag}
+            </span>
+          );
+        })}
         {hiddenCount > 0 ? <span className="tag tag-more">+{hiddenCount}</span> : null}
       </div>
       {maxVisibleCount === undefined ? (
         <div className="tag-row tag-row-measure" ref={measureRef} aria-hidden="true">
-          {tags.map((tag, index) => (
-            <span className="tag" data-tag-measure="" key={`${tag}-${index}`}>
-              {tag}
-            </span>
-          ))}
+          {tags.map((tag, index) => {
+            const displayTag = tag.trim().replace(/^#+/, "");
+
+            return (
+              <span className="tag" data-tag-measure="" key={`${displayTag}-${index}`}>
+                {displayTag}
+              </span>
+            );
+          })}
           {tags.map((_, index) => {
             const count = tags.length - index;
 

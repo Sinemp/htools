@@ -204,7 +204,8 @@ async function readBackupData(db: D1Database): Promise<BackupData> {
         .all<ContentItemRow>(),
       db
         .prepare(
-          `SELECT id, resource_type, resource_id, custom_title, chat_id, target_ref,
+          `SELECT id, resource_type, resource_id, custom_title, resource_data, category,
+                  chat_id, target_ref,
                   message_id, message_markdown,
                    media_enabled, media_url, last_pushed_hash, sent_at, updated_at
            FROM telegram_messages
@@ -272,17 +273,19 @@ async function restoreBackupData(db: D1Database, data: BackupData) {
       db
         .prepare(
           `INSERT INTO telegram_messages (
-             id, resource_type, resource_id, custom_title, chat_id, target_ref,
+             id, resource_type, resource_id, custom_title, resource_data, category, chat_id, target_ref,
              message_id, message_markdown,
              media_enabled, media_url, last_pushed_hash, sent_at, updated_at
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           row.id,
           row.resource_type,
           row.resource_id,
           row.custom_title,
+          row.resource_data ?? "",
+          row.category ?? "",
           row.chat_id,
           row.target_ref,
           row.message_id,
@@ -674,6 +677,7 @@ function normalizeTelegramMessageRow(
   if (
     resourceType !== "tool" &&
     resourceType !== "article" &&
+    resourceType !== "content" &&
     resourceType !== "custom"
   ) {
     throw new Error(`telegramMessages[${index}].resource_type is invalid.`);
@@ -690,6 +694,8 @@ function normalizeTelegramMessageRow(
     resource_type: resourceType,
     resource_id: resourceId,
     custom_title: readString(row.custom_title),
+    resource_data: readString(row.resource_data),
+    category: readString(row.category),
     chat_id: chatId,
     target_ref: readString(row.target_ref),
     message_id: messageId,

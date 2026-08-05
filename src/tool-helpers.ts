@@ -7,6 +7,7 @@ function cleanArticleTag(value: string) {
     .trim()
     .replace(/^[-*]\s*/, "")
     .replace(/^["']|["']$/g, "")
+    .replace(/^#+/, "")
     .trim();
 }
 function splitArticleTagSegment(value: string) {
@@ -15,10 +16,29 @@ function splitArticleTagSegment(value: string) {
     .replace(/^tags\s*:\s*/i, "")
     .replace(/^\[(.*)\]$/, "$1");
 
-  return trimmed
-    .split(/[\r\n,，、。;；|｜/／\\]+/)
-    .map(cleanArticleTag)
-    .filter(Boolean);
+  // Accept the common hashtag form used in posts and README files, for
+  // example: `#Cloudflare #Worker #Pages`. The hash is an input marker only;
+  // stored and displayed site tags remain plain text.
+  const tags: string[] = [];
+  for (const segment of trimmed.split(/[\r\n,，、。;；|｜/／\\]+/)) {
+    let cursor = 0;
+    let foundHashtag = false;
+    for (const match of segment.matchAll(/#[^\s#,，、。;；|｜/／\\]+/g)) {
+      foundHashtag = true;
+      const index = match.index ?? 0;
+      const plain = cleanArticleTag(segment.slice(cursor, index));
+      if (plain) tags.push(plain);
+      tags.push(cleanArticleTag(match[0]));
+      cursor = index + match[0].length;
+    }
+    const remainder = cleanArticleTag(segment.slice(cursor));
+    if (remainder) tags.push(remainder);
+    if (!foundHashtag && !remainder) {
+      const fallback = cleanArticleTag(segment);
+      if (fallback) tags.push(fallback);
+    }
+  }
+  return tags;
 }
 
 export function parseArticleTagsInput(value: string) {
@@ -60,7 +80,14 @@ export function parseArticleTagsInput(value: string) {
 }
 
 export function formatTagInputText(tags: string[]) {
-  return tags.join(", ");
+  return tags
+    .map((tag) => cleanArticleTag(tag))
+    .filter(Boolean)
+    .join(", ");
+}
+
+export function normalizeTagInputText(value: string) {
+  return formatTagInputText(parseArticleTagsInput(value));
 }
 
 export function createImageFromUrl(url: string) {

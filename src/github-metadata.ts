@@ -20,6 +20,7 @@ type GitHubRepositoryResponse = {
 type BrowserGitHubMetadataOptions = {
   fetchImpl?: typeof fetch;
   forceRefresh?: boolean;
+  timeoutMs?: number;
 };
 
 export class BrowserGitHubMetadataError extends Error {
@@ -28,6 +29,7 @@ export class BrowserGitHubMetadataError extends Error {
       | "GITHUB_URL_INVALID"
       | "GITHUB_REPOSITORY_NOT_FOUND"
       | "GITHUB_RATE_LIMITED"
+      | "GITHUB_METADATA_TIMEOUT"
       | "GITHUB_REQUEST_FAILED",
     message: string
   ) {
@@ -37,6 +39,7 @@ export class BrowserGitHubMetadataError extends Error {
 }
 
 const browserGitHubMetadataCache = new Map<string, GitHubToolMetadata>();
+export const GITHUB_METADATA_REQUEST_TIMEOUT_MS = 10_000;
 
 export async function loadBrowserGitHubMetadata(
   value: string,
@@ -56,44 +59,66 @@ export async function loadBrowserGitHubMetadata(
   if (cached && !options.forceRefresh) return cached;
 
   const [owner, repo] = repoPath.split("/");
-  const response = await (options.fetchImpl ?? fetch)(
-    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs ?? GITHUB_METADATA_REQUEST_TIMEOUT_MS;
+  let timedOut = false;
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  let data: GitHubRepositoryResponse;
+
+  try {
+    const response = await (options.fetchImpl ?? fetch)(
+      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28"
+        },
+        signal: controller.signal
       }
+    );
+
+    if (response.status === 404) {
+      throw new BrowserGitHubMetadataError(
+        "GITHUB_REPOSITORY_NOT_FOUND",
+        "GitHub repository not found."
+      );
     }
-  ).catch(() => {
+    if (
+      response.status === 429 ||
+      (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")
+    ) {
+      throw new BrowserGitHubMetadataError(
+        "GITHUB_RATE_LIMITED",
+        "GitHub API rate limit reached. Try again later."
+      );
+    }
+    if (!response.ok) {
+      throw new BrowserGitHubMetadataError(
+        "GITHUB_REQUEST_FAILED",
+        `GitHub API request failed with status ${response.status}.`
+      );
+    }
+
+    data = (await response.json()) as GitHubRepositoryResponse;
+  } catch (error) {
+    if (timedOut) {
+      throw new BrowserGitHubMetadataError(
+        "GITHUB_METADATA_TIMEOUT",
+        "GitHub metadata request timed out."
+      );
+    }
+    if (error instanceof BrowserGitHubMetadataError) throw error;
     throw new BrowserGitHubMetadataError(
       "GITHUB_REQUEST_FAILED",
       "Unable to load GitHub metadata."
     );
-  });
-
-  if (response.status === 404) {
-    throw new BrowserGitHubMetadataError(
-      "GITHUB_REPOSITORY_NOT_FOUND",
-      "GitHub repository not found."
-    );
-  }
-  if (
-    response.status === 429 ||
-    (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")
-  ) {
-    throw new BrowserGitHubMetadataError(
-      "GITHUB_RATE_LIMITED",
-      "GitHub API rate limit reached. Try again later."
-    );
-  }
-  if (!response.ok) {
-    throw new BrowserGitHubMetadataError(
-      "GITHUB_REQUEST_FAILED",
-      `GitHub API request failed with status ${response.status}.`
-    );
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
 
-  const data = (await response.json()) as GitHubRepositoryResponse;
   if (data.private === true) {
     throw new BrowserGitHubMetadataError(
       "GITHUB_REPOSITORY_NOT_FOUND",

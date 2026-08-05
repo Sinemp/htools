@@ -128,6 +128,7 @@ export type Messages = {
     githubMetadataSuccess: string;
     githubMetadataNotFound: string;
     githubMetadataRateLimited: string;
+    githubMetadataTimeout: string;
     githubMetadataFailed: string;
     submitHint: string;
     validationNameRequired: string;
@@ -244,14 +245,19 @@ export type Messages = {
     };
   };
   form: {
+    addDescription: string;
+    editDescription: string;
     name: string;
+    namePlaceholder: string;
     url: string;
+    urlPlaceholder: string;
     demoUrl: string;
     demoUrlPlaceholder: string;
     image: string;
     imagePlaceholder: string;
     category: string;
     description: string;
+    descriptionPlaceholder: string;
     tags: string;
     tagsPlaceholder: string;
     githubMetadata: string;

@@ -3,6 +3,15 @@ import type { ContentItemSummary, GitHubToolMetadata, ToolInput } from "./types"
 import { normalizeMarkdownImageUrl } from "./article-helpers";
 import { isValidHttpUrl } from "./tool-helpers";
 
+export type GitHubMetadataEditableFields = {
+  name: string;
+  description: string;
+  url: string;
+  demoUrl: string;
+  image: string;
+  tags: string[];
+};
+
 function shouldUseGitHubMetadataValue(
   currentValue: string,
   previousValue?: string
@@ -19,8 +28,33 @@ export function applyGitHubMetadataToForm(
   normalizedUrl: string,
   previousMetadata?: GitHubToolMetadata | null,
   overwrite = false,
-  requestSnapshot?: ToolInput
+  requestSnapshot?: GitHubMetadataEditableFields
 ): ToolInput {
+  const fields = applyGitHubMetadataToFields(
+    current,
+    metadata,
+    normalizedUrl,
+    previousMetadata,
+    overwrite,
+    requestSnapshot
+  );
+
+  return {
+    ...current,
+    ...fields,
+    githubLanguage: metadata.language,
+    githubLicense: metadata.license
+  };
+}
+
+export function applyGitHubMetadataToFields(
+  current: GitHubMetadataEditableFields,
+  metadata: GitHubToolMetadata,
+  normalizedUrl: string,
+  previousMetadata?: GitHubToolMetadata | null,
+  overwrite = false,
+  requestSnapshot?: GitHubMetadataEditableFields
+): GitHubMetadataEditableFields {
   if (overwrite) {
     const snapshot = requestSnapshot ?? current;
     const applyIfUnchanged = (
@@ -44,8 +78,6 @@ export function applyGitHubMetadataToForm(
         metadata.demoUrl
       ),
       image: applyIfUnchanged(current.image, snapshot.image, metadata.image),
-      githubLanguage: metadata.language,
-      githubLicense: metadata.license,
       tags: current.tags
     };
   }
@@ -71,8 +103,6 @@ export function applyGitHubMetadataToForm(
     image: shouldUseGitHubMetadataValue(current.image, previousMetadata?.image)
       ? metadata.image
       : current.image,
-    githubLanguage: metadata.language,
-    githubLicense: metadata.license,
     tags: current.tags
   };
 }

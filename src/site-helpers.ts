@@ -959,9 +959,12 @@ export function getLocalizedErrorMessage(
     TELEGRAM_DISABLED: isChinese
       ? "Telegram 推送尚未开启。"
       : "Telegram pushing is disabled.",
+    TELEGRAM_TARGET_UNAVAILABLE: isChinese
+      ? "机器人无法访问目标会话，请先将机器人加入该群组或频道后重试。"
+      : "The bot cannot access the target chat. Add it to the group or channel, then try again.",
     TELEGRAM_PERMISSION_DENIED: isChinese
-      ? "机器人没有向目标会话发送或编辑消息的权限，请先调整 Telegram 权限后重试。"
-      : "The bot cannot send or edit messages in the target chat. Update its Telegram permissions and try again.",
+      ? "机器人没有向目标群组或频道发送消息的权限，请授予相应的发送或发布权限后重试。"
+      : "The bot cannot send messages to the target group or channel. Grant the required posting permission, then try again.",
     TELEGRAM_MESSAGE_NOT_FOUND: isChinese
       ? "原 Telegram 消息已不存在，可清除旧消息记录后手动重新推送。"
       : "The original Telegram message no longer exists. Clear its old record and push it manually again.",
@@ -974,6 +977,12 @@ export function getLocalizedErrorMessage(
     TELEGRAM_MESSAGE_TOO_LONG: isChinese
       ? "完整消息超过 Telegram 的 4096 字符限制。"
       : "The complete message exceeds Telegram's 4096-character limit.",
+    TELEGRAM_TEST_TIMEOUT: isChinese
+      ? "Telegram 测试连接超时，请检查网络或稍后重试。"
+      : "Telegram connection test timed out. Check your network or try again later.",
+    GITHUB_METADATA_TIMEOUT: isChinese
+      ? "GitHub 信息读取超时，请检查网络后重试。"
+      : "GitHub metadata request timed out. Check your connection and try again.",
     TELEGRAM_UNAVAILABLE: isChinese
       ? "Telegram 服务请求失败，请检查机器人配置或稍后重试。"
       : "The Telegram request failed. Check the bot configuration or try again later.",

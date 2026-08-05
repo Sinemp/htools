@@ -12,7 +12,7 @@ import {
   type Env
 } from "../../_shared";
 
-const ADMIN_CATEGORY_SCOPES = ["tools", "articles", "content"] as const;
+const ADMIN_CATEGORY_SCOPES = ["tools", "articles", "push", "content"] as const;
 const ADMIN_ALL_CATEGORY = "All";
 const ADMIN_FEATURED_CATEGORY = "__admin_featured__";
 
@@ -152,7 +152,9 @@ function isReservedCategory(category: string) {
     category === "全部" ||
     category === "精选" ||
     normalized === "all" ||
-    normalized === "featured"
+    normalized === "featured" ||
+    normalized === "__telegram_tool__" ||
+    normalized === "__telegram_article__"
   );
 }
 
@@ -211,6 +213,14 @@ async function migrateCategoryContent(
     );
   }
 
+  if (scope === "push") {
+    return getChanges(
+      await db.prepare(
+        "UPDATE telegram_messages SET category = ? WHERE category = ?"
+      ).bind(targetCategory, category).run()
+    );
+  }
+
   const now = new Date().toISOString();
   const sourceResult = await db.prepare(
     "UPDATE content_sources SET category = ?, updated_at = ? WHERE category = ?"
@@ -265,6 +275,19 @@ async function deleteCategoryContent(
       .run();
     return getChanges(
       await db.prepare("DELETE FROM articles WHERE category = ?")
+        .bind(category)
+        .run()
+    );
+  }
+
+  if (scope === "push") {
+    if (isAllCategory(category)) {
+      return getChanges(
+        await db.prepare("UPDATE telegram_messages SET category = ''").run()
+      );
+    }
+    return getChanges(
+      await db.prepare("UPDATE telegram_messages SET category = '' WHERE category = ?")
         .bind(category)
         .run()
     );

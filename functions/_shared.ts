@@ -227,7 +227,7 @@ type ParsedFeed = {
   items: ParsedFeedItem[];
 };
 
-export type AdminCategoryScope = "tools" | "articles" | "content";
+export type AdminCategoryScope = "tools" | "articles" | "push" | "content";
 
 export type AdminCategorySettings = Record<AdminCategoryScope, string[]>;
 
@@ -454,10 +454,11 @@ const DEFAULT_SITE_SETTINGS: SiteSettings = {
     en: { titleTop: "", titleBottom: "", description: "" }
   }
 };
-const ADMIN_CATEGORY_SCOPES = ["tools", "articles", "content"] as const;
+const ADMIN_CATEGORY_SCOPES = ["tools", "articles", "push", "content"] as const;
 const DEFAULT_ADMIN_CATEGORY_SETTINGS: AdminCategorySettings = {
   tools: [],
   articles: [],
+  push: [],
   content: []
 };
 const initializedDatabases = new WeakSet<D1Database>();
@@ -466,8 +467,9 @@ const initializedTelegramMessageDatabases = new WeakSet<D1Database>();
 const telegramMessageInitializationPromises = new WeakMap<D1Database, Promise<void>>();
 const DATABASE_SCHEMA_VERSION_KEY = "database_schema_version";
 // Increment this whenever SCHEMA_STATEMENTS or compatibility column upgrades change.
-const DATABASE_SCHEMA_VERSION = 12;
+const DATABASE_SCHEMA_VERSION = 15;
 const TELEGRAM_MESSAGE_COLUMNS = `id, resource_type, resource_id, custom_title,
+  resource_data, category,
   chat_id, target_ref, message_id, message_markdown, media_enabled, media_url,
   last_pushed_hash, sent_at, updated_at`;
 const TELEGRAM_MESSAGE_MIGRATION_TABLE = "telegram_messages_migrate";
@@ -475,9 +477,11 @@ const TELEGRAM_MESSAGE_MIGRATION_TABLE = "telegram_messages_migrate";
 function createTelegramMessageTableStatement(table: string) {
   return `CREATE TABLE IF NOT EXISTS ${table} (
   id TEXT PRIMARY KEY,
-  resource_type TEXT NOT NULL CHECK (resource_type IN ('tool', 'article', 'custom')),
+  resource_type TEXT NOT NULL CHECK (resource_type IN ('tool', 'article', 'content', 'custom')),
   resource_id TEXT NOT NULL,
   custom_title TEXT NOT NULL DEFAULT '',
+  resource_data TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
   chat_id TEXT NOT NULL,
   target_ref TEXT NOT NULL DEFAULT '',
   message_id TEXT NOT NULL,
@@ -780,12 +784,15 @@ type ApiErrorCode =
   | "TURNSTILE_UNAVAILABLE"
   | "TELEGRAM_NOT_CONFIGURED"
   | "TELEGRAM_DISABLED"
+  | "TELEGRAM_TARGET_UNAVAILABLE"
   | "TELEGRAM_PERMISSION_DENIED"
   | "TELEGRAM_MESSAGE_NOT_FOUND"
   | "TELEGRAM_MESSAGE_EXISTS"
   | "TELEGRAM_TARGET_CHANGED"
   | "TELEGRAM_MESSAGE_TOO_LONG"
+  | "TELEGRAM_TEST_TIMEOUT"
   | "TELEGRAM_UNAVAILABLE"
+  | "GITHUB_METADATA_TIMEOUT"
   | "BACKUP_DATA_INVALID";
 
 type ApiErrorPayload = {
@@ -1060,6 +1067,11 @@ export class UpstreamServiceError extends Error {
     super(message);
     this.name = "UpstreamServiceError";
   }
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error &&
+    (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
 export function writeErrorResponse(
@@ -1436,7 +1448,7 @@ export function validateToolPayload(payload: ToolPayload) {
   const tags = Array.isArray(payload.tags)
     ? payload.tags
         .filter((tag): tag is string => typeof tag === "string")
-        .map((tag) => tag.trim())
+        .map((tag) => tag.trim().replace(/^#+/, ""))
         .filter(Boolean)
         .slice(0, 8)
     : [];
@@ -1528,7 +1540,7 @@ export function validateArticlePayload(payload: ArticlePayload) {
       : [];
   const tags = tagValues
     .filter((tag): tag is string => typeof tag === "string")
-    .map((tag) => tag.trim())
+    .map((tag) => tag.trim().replace(/^#+/, ""))
     .filter(Boolean)
     .slice(0, 24);
   const published = payload.published !== false;
@@ -1599,7 +1611,7 @@ export function validateContentSourcePayload(
       : [];
   const tags = tagValues
     .filter((tag): tag is string => typeof tag === "string")
-    .map((tag) => tag.trim())
+    .map((tag) => tag.trim().replace(/^#+/, ""))
     .filter(Boolean)
     .slice(0, 24);
   const enabled = payload.enabled !== false;
@@ -1723,12 +1735,16 @@ async function initializeTelegramMessageSchema(db: D1Database) {
     db.prepare(TELEGRAM_MESSAGE_INDEX_STATEMENT)
   ]);
   await upgradeTelegramMessageTable(db);
+  await ensureTelegramMessageColumns(db);
 
   const legacyTable = await db.prepare(
     `SELECT name FROM sqlite_master
      WHERE type = 'table' AND name = 'telegram_tool_messages'`
   ).first<{ name: string }>();
-  if (!legacyTable) return;
+  if (!legacyTable) {
+    await backfillTelegramMessageResources(db);
+    return;
+  }
 
   const legacyColumns = await db
     .prepare("PRAGMA table_info(telegram_tool_messages)")
@@ -1739,6 +1755,8 @@ async function initializeTelegramMessageSchema(db: D1Database) {
   }
 
   const targetRef = columns.has("target_ref") ? "target_ref" : "''";
+  const resourceData = columns.has("resource_data") ? "resource_data" : "''";
+  const category = columns.has("category") ? "category" : "''";
   const mediaEnabled = columns.has("media_enabled")
     ? "media_enabled"
     : columns.has("link_preview_enabled")
@@ -1751,10 +1769,12 @@ async function initializeTelegramMessageSchema(db: D1Database) {
     `INSERT OR IGNORE INTO telegram_messages (
        id, resource_type, resource_id, chat_id, target_ref, message_id,
        message_markdown, media_enabled, media_url, last_pushed_hash,
+       resource_data, category,
        sent_at, updated_at
      )
      SELECT id, 'tool', tool_id, chat_id, ${targetRef}, message_id,
             message_markdown, ${mediaEnabled}, ${mediaUrl}, ${pushedHash},
+            ${resourceData}, ${category},
             sent_at, updated_at
      FROM telegram_tool_messages`
   ).run();
@@ -1770,6 +1790,7 @@ async function initializeTelegramMessageSchema(db: D1Database) {
   }
 
   await db.prepare("DROP TABLE telegram_tool_messages").run();
+  await backfillTelegramMessageResources(db);
 }
 
 async function upgradeTelegramMessageTable(db: D1Database) {
@@ -1777,13 +1798,15 @@ async function upgradeTelegramMessageTable(db: D1Database) {
     `SELECT sql FROM sqlite_master
      WHERE type = 'table' AND name = 'telegram_messages'`
   ).first<{ sql: string | null }>();
-  if (!table?.sql || table.sql.includes("'custom'")) return;
+  if (!table?.sql || table.sql.includes("'content'")) return;
 
   const existingColumns = await db
     .prepare("PRAGMA table_info(telegram_messages)")
     .all<{ name: string }>();
   const columns = new Set(existingColumns.results.map((column) => column.name));
   const customTitle = columns.has("custom_title") ? "custom_title" : "''";
+  const resourceData = columns.has("resource_data") ? "resource_data" : "''";
+  const category = columns.has("category") ? "category" : "''";
 
   await db.batch([
     db.prepare(`DROP TABLE IF EXISTS ${TELEGRAM_MESSAGE_MIGRATION_TABLE}`),
@@ -1791,6 +1814,7 @@ async function upgradeTelegramMessageTable(db: D1Database) {
     db.prepare(
       `INSERT INTO ${TELEGRAM_MESSAGE_MIGRATION_TABLE} (${TELEGRAM_MESSAGE_COLUMNS})
        SELECT id, resource_type, resource_id, ${customTitle},
+              ${resourceData}, ${category},
               chat_id, target_ref, message_id, message_markdown, media_enabled,
               media_url, last_pushed_hash, sent_at, updated_at
        FROM telegram_messages`
@@ -1800,6 +1824,78 @@ async function upgradeTelegramMessageTable(db: D1Database) {
       `ALTER TABLE ${TELEGRAM_MESSAGE_MIGRATION_TABLE} RENAME TO telegram_messages`
     ),
     db.prepare(TELEGRAM_MESSAGE_INDEX_STATEMENT)
+  ]);
+}
+
+async function ensureTelegramMessageColumns(db: D1Database) {
+  const table = await db.prepare(
+    `SELECT sql FROM sqlite_master
+     WHERE type = 'table' AND name = 'telegram_messages'`
+  ).first<{ sql: string | null }>();
+  if (!table?.sql || (table.sql.includes("resource_data") && table.sql.includes("category"))) {
+    return;
+  }
+  const existing = await db.prepare("PRAGMA table_info(telegram_messages)").all<{ name: string }>();
+  const names = new Set(existing.results.map((column) => column.name));
+  const statements: D1PreparedStatement[] = [];
+  if (!names.has("resource_data")) {
+    statements.push(db.prepare("ALTER TABLE telegram_messages ADD COLUMN resource_data TEXT NOT NULL DEFAULT ''"));
+  }
+  if (!names.has("category")) {
+    statements.push(db.prepare("ALTER TABLE telegram_messages ADD COLUMN category TEXT NOT NULL DEFAULT ''"));
+  }
+  if (statements.length) await db.batch(statements);
+  await backfillTelegramMessageResources(db);
+}
+
+async function backfillTelegramMessageResources(db: D1Database) {
+  await Promise.all([
+    db.prepare(
+      `UPDATE telegram_messages
+       SET resource_data = COALESCE((
+             SELECT json_object(
+               'type', 'tool', 'id', tools.id, 'title', tools.name,
+               'description', tools.description, 'url', tools.url,
+               'demoUrl', tools.demo_url, 'image', tools.image,
+               'category', '', 'tags',
+               CASE WHEN json_valid(tools.tags) THEN json(tools.tags) ELSE json('[]') END
+             )
+             FROM tools WHERE tools.id = telegram_messages.resource_id
+           ), resource_data)
+       WHERE resource_type = 'tool' AND resource_data = ''`
+    ).run(),
+    db.prepare(
+      `UPDATE telegram_messages
+       SET resource_data = COALESCE((
+             SELECT json_object(
+               'type', 'article', 'id', articles.id, 'title', articles.title,
+               'description', articles.summary,
+               'url', '/articles/' || articles.slug || CASE WHEN articles.published = 1 THEN '' ELSE '?preview=1' END,
+               'demoUrl', '', 'image', articles.cover_image,
+               'category', '', 'tags',
+               CASE WHEN json_valid(articles.tags) THEN json(articles.tags) ELSE json('[]') END
+             )
+             FROM articles WHERE articles.id = telegram_messages.resource_id
+           ), resource_data)
+       WHERE resource_type = 'article' AND resource_data = ''`
+    ).run(),
+    db.prepare(
+      `UPDATE telegram_messages
+       SET resource_data = COALESCE((
+             SELECT json_object(
+               'type', 'content', 'id', content_items.id,
+               'title', content_items.title,
+               'description', content_items.summary,
+               'url', '/articles/content-preview?contentItem=' || content_items.id,
+               'demoUrl', content_items.url,
+               'image', content_items.cover_image,
+               'category', '', 'tags',
+               CASE WHEN json_valid(content_items.tags) THEN json(content_items.tags) ELSE json('[]') END
+             )
+             FROM content_items WHERE content_items.id = telegram_messages.resource_id
+           ), resource_data)
+       WHERE resource_type = 'content' AND resource_data = ''`
+    ).run()
   ]);
 }
 
@@ -2235,6 +2331,7 @@ function parseArticleTagString(value: string) {
       .trim()
       .replace(/^[-*]\s*/, "")
       .replace(/^["']|["']$/g, "")
+      .replace(/^#+/, "")
       .trim();
   }
 
@@ -2244,11 +2341,24 @@ function parseArticleTagString(value: string) {
       .replace(/^tags\s*:\s*/i, "")
       .replace(/^\[(.*)\]$/, "$1");
 
-    normalized
-      .split(/[\r\n,，、。;；|｜/／\\]+/)
-      .map(cleanTag)
-      .filter(Boolean)
-      .forEach((tag) => tags.push(tag));
+    for (const segment of normalized.split(/[\r\n,，、。;；|｜/／\\]+/)) {
+      let cursor = 0;
+      let foundHashtag = false;
+      for (const match of segment.matchAll(/#[^\s#,，、。;；|｜/／\\]+/g)) {
+        foundHashtag = true;
+        const index = match.index ?? 0;
+        const plain = cleanTag(segment.slice(cursor, index));
+        if (plain) tags.push(plain);
+        tags.push(cleanTag(match[0]));
+        cursor = index + match[0].length;
+      }
+      const remainder = cleanTag(segment.slice(cursor));
+      if (remainder) tags.push(remainder);
+      if (!foundHashtag && !remainder) {
+        const fallback = cleanTag(segment);
+        if (fallback) tags.push(fallback);
+      }
+    }
   }
 
   if (tagKeyIndex >= 0) {
@@ -3275,6 +3385,7 @@ function normalizeAdminCategorySettings(
   return {
     tools: normalizeAdminCategoryList(value.tools),
     articles: normalizeAdminCategoryList(value.articles),
+    push: normalizeAdminCategoryList(value.push),
     content: normalizeAdminCategoryList(value.content)
   };
 }
@@ -3296,7 +3407,10 @@ function isReservedAdminCategory(category: string) {
     category === "全部" ||
     category === "精选" ||
     normalized === "all" ||
-    normalized === "featured"
+    normalized === "featured" ||
+    normalized === "__telegram_tool__" ||
+    normalized === "__telegram_article__" ||
+    normalized === "__telegram_content__"
   );
 }
 
@@ -4069,6 +4183,8 @@ function createGitHubOpenGraphImageUrl(url: string) {
 
 const GITHUB_METADATA_FRESH_TTL_MS = 60 * 60 * 1000;
 const GITHUB_METADATA_CACHE_TTL_SECONDS = 24 * 60 * 60;
+const GITHUB_METADATA_REQUEST_TIMEOUT_MS = 10_000;
+const GITHUB_METADATA_TIMEOUT_ERROR = "GitHub metadata request timed out.";
 
 export async function loadGitHubToolMetadata(
   url: string,
@@ -4116,7 +4232,18 @@ export async function loadGitHubToolMetadata(
     headers.set("If-None-Match", cachedEntry.etag);
   }
 
-  const response = await fetch(apiUrl, { headers });
+  let response: Response;
+  try {
+    response = await fetch(apiUrl, {
+      headers,
+      signal: AbortSignal.timeout(GITHUB_METADATA_REQUEST_TIMEOUT_MS)
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new UpstreamServiceError(GITHUB_METADATA_TIMEOUT_ERROR);
+    }
+    throw new UpstreamServiceError("GitHub API request failed.");
+  }
 
   if (response.status === 304 && cachedEntry) {
     const refreshedEntry = {
@@ -4141,7 +4268,15 @@ export async function loadGitHubToolMetadata(
     );
   }
 
-  const repoData = (await response.json()) as GitHubRepoResponse;
+  let repoData: GitHubRepoResponse;
+  try {
+    repoData = (await response.json()) as GitHubRepoResponse;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new UpstreamServiceError(GITHUB_METADATA_TIMEOUT_ERROR);
+    }
+    throw new UpstreamServiceError("GitHub API response was invalid.");
+  }
   const fullName = readOptionalString(repoData.full_name) || repoPath;
   const repoName = readOptionalString(repoData.name) || repo;
   const repoOwner = readOptionalString(repoData.owner?.login) || owner;

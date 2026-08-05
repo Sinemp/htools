@@ -1,10 +1,10 @@
 import { ArrowDownUp, ArrowRightLeft, ArrowUp, ArrowUpRight, CheckCircle2, ChevronDown, ChevronRight, Circle, Eraser, FileText, Github, LogOut, PanelLeft, Plus, RefreshCw, Rss, Search, Send, Settings, ShieldCheck, Star, SquarePen, Tags, Trash2, Upload, Wand2, Wrench, X } from "lucide-react";
-import { ChangeEvent, CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { applyAdminCategoryAction, checkLinks, createArticle, createContentSource, createTool, deleteArticle, deleteContentSource, deleteTelegramPush, deleteTool, exportBackupData, exportToolSourceData, importTools, loadAdminArticle, loadAdminArticles, loadAdminAuthConfig, loadAdminCategorySettings, loadAdminSecuritySettings, loadAdminTools, loadContentItems, loadContentSources, loadGitHubSettings, loadGitHubToolMetadata, loadProxySettings, loadSiteConfiguration, loadSiteSettings, loadSourceSettings, loadTelegramMessage, loadTelegramPushRecords, loadTelegramSettings, loadTurnstileSettings, loadUmamiSettings, login, patchSiteSettings, recoverTelegramMessage, resetFactorySettings, restoreBackupData, saveAdminCategorySettings, saveGitHubSettings, saveProxySettings, saveSourceSettings, saveTelegramMessage, saveTelegramSettings, saveTurnstileSettings, saveUmamiSettings, sendTelegramMessage, syncContentSource, testTelegramSettings, updateArticle, updateArticlePublished, updateAdminPassword, updateContentSource, convertContentItemToArticle, previewContentSource, updateTelegramMessage, updateTool, type AdminAuthConfig } from "./admin-api";
+import { applyAdminCategoryAction, checkLinks, createArticle, createContentSource, createTool, deleteArticle, deleteContentSource, deleteTelegramPush, deleteTool, exportBackupData, exportToolSourceData, importTools, loadAdminArticle, loadAdminArticles, loadAdminAuthConfig, loadAdminCategorySettings, loadAdminSecuritySettings, loadAdminTools, loadContentItems, loadContentSources, loadGitHubSettings, loadProxySettings, loadSiteConfiguration, loadSiteSettings, loadSourceSettings, loadTelegramMessage, loadTelegramPushRecords, loadTelegramSettings, loadTelegramSource, loadTurnstileSettings, loadUmamiSettings, login, patchSiteSettings, recoverTelegramMessage, resetFactorySettings, restoreBackupData, saveAdminCategorySettings, saveGitHubSettings, saveProxySettings, saveSourceSettings, saveTelegramMessage, saveTelegramSettings, saveTurnstileSettings, saveUmamiSettings, sendTelegramMessage, syncContentSource, testTelegramSettings, updateArticle, updateArticlePublished, updateAdminPassword, updateContentSource, convertContentItemToArticle, previewContentSource, updateTelegramMessage, updateTool, type AdminAuthConfig } from "./admin-api";
 import { translations, type Locale, type Messages } from "./i18n";
 import { normalizeProxyBaseUrl, normalizeProxyMode, normalizeProxyScope, proxifyUrl } from "./proxy";
-import type { AdminCategoryAction, AdminCategoryScope, AdminCategorySettings, AdminSecuritySettings, Article, ArticleInput, ArticleSummary, ContentItemSummary, ContentSource, ContentSourceInput, FeedPreview, FooterSettings, GitHubSettings, GitHubSettingsInput, GitHubToolMetadata, HomeHeroContent, LinkCheckResult, ProxySettings, HtoolsBackup, SiteSettings, SourceSettings, TelegramConnection, TelegramMessage, TelegramPushRecord, TelegramResourceType, TelegramSettings, TurnstileSettings, Tool, ToolImportMode, ToolInput, UmamiSettings } from "./types";
+import type { AdminCategoryAction, AdminCategoryScope, AdminCategorySettings, AdminSecuritySettings, Article, ArticleInput, ArticleSummary, ContentItemSummary, ContentSource, ContentSourceInput, FeedPreview, FooterSettings, GitHubSettings, GitHubSettingsInput, HomeHeroContent, LinkCheckResult, ProxySettings, HtoolsBackup, SiteSettings, SourceSettings, TelegramConnection, TelegramMessage, TelegramPushRecord, TelegramResourceType, TelegramSettings, TurnstileSettings, Tool, ToolImportMode, ToolInput, UmamiSettings } from "./types";
 import { DEFAULT_FOOTER_SETTINGS, DEFAULT_HOME_HERO_SETTINGS, DEFAULT_SITE_SETTINGS, formatFooterJson, getEditableSiteSettings, getFooterFormValues, getHomeHeroSettings, getLocalizedErrorMessage, getSiteDisplayName, getSiteFooterSettings, getSourceErrorMessage, readSiteIconFile } from "./site-helpers";
 import {
   cleanArticleDisplayText,
@@ -15,11 +15,10 @@ import {
 } from "./article-helpers";
 import {
   applyGitHubMetadataToForm,
+  applyGitHubMetadataToFields,
   createAdminIconFromUrl,
   createArticleBrowseHref,
   createContentItemPreviewHref,
-  formatGitHubCount,
-  formatGitHubUpdatedAt,
   getContentItemPreviewImage,
   getGitHubMetadataDetailText,
   isGitHubUrl,
@@ -29,11 +28,11 @@ import {
   createImageFromUrl,
   formatTagInputText,
   getCategoryLabel,
-  getGitHubRepoPath,
   getToolInitials,
   isGitHubRepoUrl,
   isValidHttpUrl,
   normalizeHttpUrlInput,
+  normalizeTagInputText,
   parseArticleTagsInput
 } from "./tool-helpers";
 import {
@@ -57,9 +56,15 @@ import {
   usePointerFocusRelease
 } from "./usePointerFocusRelease";
 import { hasCompleteUmamiSettings, normalizeUmamiScriptUrl, normalizeUmamiWebsiteId } from "./umami";
-import { buildTelegramPreviewMarkdown, countTelegramMessageCharacters, createDefaultTelegramBody, createTelegramArticleResource, createTelegramCustomBodyExample, createTelegramResourceMediaUrl, createTelegramToolResource, escapeTelegramPreviewHashtags, getTelegramText, readTelegramBodyTitle, replaceTelegramBodyTitle, TELEGRAM_MESSAGE_LIMIT, type TelegramPushResource } from "./telegram";
+import { useAdminGitHubMetadata } from "./useAdminGitHubMetadata";
+import { buildTelegramPreviewMarkdown, countTelegramMessageCharacters, createDefaultTelegramBody, createTelegramArticleResource, createTelegramContentResource, createTelegramCustomBodyExample, createTelegramResourceMediaUrl, createTelegramToolResource, escapeTelegramPreviewHashtags, getTelegramText, readTelegramBodyFields, syncTelegramBodyField, TELEGRAM_MESSAGE_LIMIT, type TelegramPushResource } from "./telegram";
 import { getAdminMaintenanceText, getAdminWorkspaceText, getContentFlowText } from "./admin-text";
 import AdminMarkdownEditor from "./components/AdminMarkdownEditor";
+import {
+  AdminGitHubMetadataButton,
+  AdminGitHubMetadataCard
+} from "./components/AdminGitHubMetadata";
+import { AdminTagsField, AdminTextField, AdminTextareaField, AdminUrlField } from "./components/AdminResourceFields";
 import UtilityMenuControls from "./components/UtilityMenuControls";
 import { TELEGRAM_MARKDOWN_EDITOR_ACTIONS, type MarkdownEditorMode } from "./markdown-editor";
 import MarkdownContent from "./components/MarkdownContent";
@@ -112,7 +117,6 @@ import {
   sortCategoriesBySettings,
   type AdminView,
   type AdminSystemSettingsGroup,
-  type AppliedGitHubMetadata,
   type ConvertPublishMode,
   type PendingAdminCategoryAction,
   type ThemeMode,
@@ -155,7 +159,6 @@ function formatAdminDocumentTitle(
 }
 
 type AdminSortMode = "latest" | "oldest";
-type TelegramPushTypeFilter = "all" | TelegramResourceType;
 type AdminWriteEntityScope =
   | "tool"
   | "article"
@@ -163,6 +166,77 @@ type AdminWriteEntityScope =
   | "content-source"
   | "content-item";
 const TELEGRAM_PUSH_PAGE_SIZE = 30;
+const TELEGRAM_PUSH_TOOL_FILTER = "__telegram_tool__";
+const TELEGRAM_PUSH_ARTICLE_FILTER = "__telegram_article__";
+const TELEGRAM_PUSH_CONTENT_FILTER = "__telegram_content__";
+const TELEGRAM_PUSH_FIXED_FILTERS = [
+  "All",
+  TELEGRAM_PUSH_TOOL_FILTER,
+  TELEGRAM_PUSH_ARTICLE_FILTER,
+  TELEGRAM_PUSH_CONTENT_FILTER
+];
+
+function isTelegramPushSourceFilter(value: string) {
+  return value === TELEGRAM_PUSH_TOOL_FILTER ||
+    value === TELEGRAM_PUSH_ARTICLE_FILTER ||
+    value === TELEGRAM_PUSH_CONTENT_FILTER;
+}
+
+function getTelegramPushDefaultFilter(resourceType: TelegramResourceType) {
+  if (resourceType === "tool") return TELEGRAM_PUSH_TOOL_FILTER;
+  if (resourceType === "article") return TELEGRAM_PUSH_ARTICLE_FILTER;
+  if (resourceType === "content") return TELEGRAM_PUSH_CONTENT_FILTER;
+  return "";
+}
+
+function getTelegramWriteEntityScope(
+  resourceType: TelegramResourceType
+): AdminWriteEntityScope {
+  return resourceType === "content" ? "content-item" : resourceType;
+}
+
+function getTelegramStoredCategory(value: string) {
+  const normalized = normalizeAdminCategoryValue(value);
+  return isAllCategoryValue(normalized) || isTelegramPushSourceFilter(normalized)
+    ? ""
+    : normalized;
+}
+
+function getTelegramDisplayCategory(
+  resourceType: TelegramResourceType,
+  value: string
+) {
+  const stored = getTelegramStoredCategory(value);
+  return stored || getTelegramPushDefaultFilter(resourceType);
+}
+
+function getTelegramPushCategoryLabel(
+  category: string,
+  telegramText: ReturnType<typeof getTelegramText>,
+  t: Messages
+) {
+  if (category === TELEGRAM_PUSH_TOOL_FILTER) {
+    return telegramText.management.typeTool;
+  }
+  if (category === TELEGRAM_PUSH_ARTICLE_FILTER) {
+    return telegramText.management.typeArticle;
+  }
+  if (category === TELEGRAM_PUSH_CONTENT_FILTER) {
+    return telegramText.management.typeContent;
+  }
+  return getCategoryLabel(category, t);
+}
+
+function uniqueAdminCategories(categories: string[]) {
+  return Array.from(
+    new Map(
+      categories
+        .map(normalizeAdminCategoryValue)
+        .filter(Boolean)
+        .map((category) => [category.toLocaleLowerCase(), category] as const)
+    ).values()
+  );
+}
 type TelegramMessageErrorCode =
   | "TELEGRAM_MESSAGE_NOT_FOUND"
   | "TELEGRAM_PERMISSION_DENIED"
@@ -399,8 +473,6 @@ function PublishModeField({
   );
 }
 
-const TELEGRAM_PUSH_TYPE_OPTIONS = ["All", "tool", "article", "custom"];
-
 function BooleanSegmentedToggle({
   className = "",
   disabled = false,
@@ -438,35 +510,6 @@ function BooleanSegmentedToggle({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function TelegramMediaModeField({
-  disabled,
-  disabledLabel,
-  enabledLabel,
-  label,
-  onChange,
-  value
-}: {
-  disabled: boolean;
-  disabledLabel: string;
-  enabledLabel: string;
-  label: string;
-  onChange: (value: boolean) => void;
-  value: boolean;
-}) {
-  return (
-    <div className="tool-form-field article-publish-mode-field">
-      <span className="tool-form-label">{label}</span>
-      <BooleanSegmentedToggle
-        disabled={disabled}
-        disabledLabel={disabledLabel}
-        enabledLabel={enabledLabel}
-        onChange={onChange}
-        value={value}
-      />
     </div>
   );
 }
@@ -539,6 +582,7 @@ function AdminConfirmDialog({
     <Dialog
       closeDisabled={disabled}
       closeLabel={closeLabel ?? cancelLabel}
+      description={description}
       descriptionId={descriptionId}
       onClose={onCancel}
       panelClassName="tool-editor-dialog admin-action-dialog admin-confirm-dialog"
@@ -552,11 +596,7 @@ function AdminConfirmDialog({
           primaryLabel={confirmLabel}
         />
       }
-    >
-      <p className="admin-confirm-dialog-description" id={descriptionId}>
-        {description}
-      </p>
-    </Dialog>
+    />
   );
 }
 
@@ -649,8 +689,8 @@ export default function AdminApp({
   const [telegramSettingsLoadError, setTelegramSettingsLoadError] =
     useState<unknown>(null);
   const [telegramPushRecords, setTelegramPushRecords] = useState<TelegramPushRecord[]>([]);
-  const [telegramPushType, setTelegramPushType] =
-    useState<TelegramPushTypeFilter>("all");
+  const [telegramPushCategoryOptions, setTelegramPushCategoryOptions] = useState<string[]>([]);
+  const [telegramPushCategory, setTelegramPushCategory] = useState("All");
   const [telegramPushSearch, setTelegramPushSearch] = useState("");
   const [telegramPushSortMode, setTelegramPushSortMode] = useState<AdminSortMode>(() =>
     getStoredAdminSortMode(ADMIN_VIEW_STATE_STORAGE_KEYS.telegram.sort)
@@ -678,9 +718,17 @@ export default function AdminApp({
     useState<TelegramMessage | null>(null);
   const [telegramQuickMode, setTelegramQuickMode] =
     useState<ConvertPublishMode>("published");
+  const [telegramQuickCategory, setTelegramQuickCategory] = useState("");
   const [telegramQuickLoading, setTelegramQuickLoading] = useState(false);
   const [telegramQuickSaving, setTelegramQuickSaving] = useState(false);
   const [telegramCustomTitle, setTelegramCustomTitle] = useState("");
+  const [telegramDescription, setTelegramDescription] = useState("");
+  const [telegramUrl, setTelegramUrl] = useState("");
+  const [telegramDemoUrl, setTelegramDemoUrl] = useState("");
+  const [telegramImage, setTelegramImage] = useState("");
+  const [telegramCategory, setTelegramCategory] = useState("");
+  const [telegramTagText, setTelegramTagText] = useState("");
+  const [telegramSourceLoading, setTelegramSourceLoading] = useState(false);
   const [telegramBodyMarkdown, setTelegramBodyMarkdown] = useState("");
   const [telegramMediaEnabled, setTelegramMediaEnabled] = useState(false);
   const [telegramMediaUrl, setTelegramMediaUrl] = useState("");
@@ -770,13 +818,6 @@ export default function AdminApp({
   const [isArticleSaving, setIsArticleSaving] = useState(false);
   const [isContentSourceSaving, setIsContentSourceSaving] = useState(false);
   const [isContentPreviewing, setIsContentPreviewing] = useState(false);
-  const [isGitHubMetadataLoading, setIsGitHubMetadataLoading] = useState(false);
-  const [isGitHubMetadataPreviewLoading, setIsGitHubMetadataPreviewLoading] =
-    useState(false);
-  const [githubMetadataPreviewFailed, setGithubMetadataPreviewFailed] =
-    useState(false);
-  const [githubMetadataPreview, setGithubMetadataPreview] =
-    useState<GitHubToolMetadata | null>(null);
   const [pendingDeleteTool, setPendingDeleteTool] = useState<Tool | null>(null);
   const [pendingDeleteArticle, setPendingDeleteArticle] =
     useState<ArticleSummary | null>(null);
@@ -822,14 +863,12 @@ export default function AdminApp({
   const adminCategorySaveGenerationRef = useRef<Record<AdminCategoryScope, number>>({
     tools: 0,
     articles: 0,
+    push: 0,
     content: 0
   });
   const adminCategorySavePendingRef = useRef(new Set<AdminCategoryScope>());
   const adminCategorySaveRunningRef = useRef(false);
   const adminCategoryRollbackRef = useRef<Partial<Record<AdminCategoryScope, string[]>>>({});
-  const lastGitHubMetadataUrl = useRef("");
-  const lastAppliedGitHubMetadata = useRef<AppliedGitHubMetadata | null>(null);
-  const githubMetadataRequestId = useRef(0);
   const adminToolsRequestGenerationRef = useRef(0);
   const adminArticlesRequestGenerationRef = useRef(0);
   const adminArticlesNextCursorRef = useRef<string | null>(null);
@@ -855,6 +894,114 @@ export default function AdminApp({
     initialFocusRef: mobileSidebarCloseRef,
     onEscape: closeMobileSidebar,
     returnFocusRef: sidebarToggleRef
+  });
+  const telegramGitHub = useAdminGitHubMetadata({
+    active: Boolean(
+      telegramResource?.type === "custom" && isCreatingTelegramPush
+    ),
+    autoApply: true,
+    autoLoad: true,
+    onError: (error) => setStatus(getLocalizedErrorMessage(error, t)),
+    getSnapshot: () => ({
+      name: telegramCustomTitle,
+      description: telegramDescription,
+      url: telegramUrl,
+      demoUrl: telegramDemoUrl,
+      image: telegramImage,
+      tags: parseArticleTagsInput(telegramTagText)
+    }),
+    onMetadata: (
+      metadata,
+      normalizedUrl,
+      previousMetadata,
+      overwrite,
+      requestSnapshot
+    ) => {
+      const nextFields = applyGitHubMetadataToFields(
+        {
+          name: telegramCustomTitle,
+          description: telegramDescription,
+          url: telegramUrl,
+          demoUrl: telegramDemoUrl,
+          image: telegramImage,
+          tags: parseArticleTagsInput(telegramTagText)
+        },
+        metadata,
+        normalizedUrl,
+        previousMetadata,
+        overwrite,
+        requestSnapshot
+      );
+      setTelegramCustomTitle(nextFields.name);
+      setTelegramDescription(nextFields.description);
+      setTelegramUrl(nextFields.url);
+      setTelegramDemoUrl(nextFields.demoUrl);
+      setTelegramImage(nextFields.image);
+      setTelegramTagText(formatTagInputText(nextFields.tags));
+      setTelegramBodyMarkdown((current) => {
+        let next = current;
+        next = syncTelegramBodyField(
+          next,
+          { title: nextFields.name },
+          telegramSettings.footerMarkdown,
+          locale
+        );
+        next = syncTelegramBodyField(
+          next,
+          { description: nextFields.description },
+          telegramSettings.footerMarkdown,
+          locale
+        );
+        next = syncTelegramBodyField(
+          next,
+          { url: nextFields.url, resourceType: "custom" },
+          telegramSettings.footerMarkdown,
+          locale
+        );
+        next = syncTelegramBodyField(
+          next,
+          { demoUrl: nextFields.demoUrl },
+          telegramSettings.footerMarkdown,
+          locale
+        );
+        return syncTelegramBodyField(
+          next,
+          { tags: nextFields.tags },
+          telegramSettings.footerMarkdown,
+          locale
+        );
+      });
+    },
+    onSuccess: () => setStatus(t.status.githubMetadataApplied),
+    sourceUrl: telegramUrl,
+    token
+  });
+  const toolGitHub = useAdminGitHubMetadata({
+    active: formOpen,
+    autoApply: !editingTool,
+    autoLoad: true,
+    getSnapshot: () => ({
+      name: form.name,
+      description: form.description,
+      url: form.url,
+      demoUrl: form.demoUrl,
+      image: form.image,
+      tags: form.tags
+    }),
+    onError: (error) => setStatus(getLocalizedErrorMessage(error, t)),
+    onMetadata: (metadata, normalizedUrl, previousMetadata, overwrite, requestSnapshot) => {
+      setForm((current) => applyGitHubMetadataToForm(
+        current,
+        metadata,
+        normalizedUrl,
+        previousMetadata,
+        overwrite,
+        requestSnapshot
+      ));
+    },
+    onSuccess: () => setStatus(t.status.githubMetadataApplied),
+    sourceUrl: form.url,
+    token
   });
   const siteName = getSiteDisplayName(siteSettings);
   const maintenanceText = getAdminMaintenanceText(locale);
@@ -976,6 +1123,16 @@ export default function AdminApp({
   const telegramPreviewMarkdown = telegramResource
     ? telegramBodyMarkdown
     : "";
+  const telegramEditedResource = telegramResource ? {
+    ...telegramResource,
+    title: telegramCustomTitle.trim(),
+    description: telegramDescription.trim(),
+    url: telegramUrl.trim(),
+    demoUrl: telegramDemoUrl.trim(),
+    image: telegramImage.trim(),
+    category: getTelegramStoredCategory(telegramCategory),
+    tags: parseArticleTagsInput(telegramTagText)
+  } : null;
   const telegramPreviewLength = countTelegramMessageCharacters(
     telegramPreviewMarkdown
   );
@@ -989,12 +1146,8 @@ export default function AdminApp({
   const telegramEditorDirty = Boolean(telegramMessage && (
     telegramBodyMarkdown !== telegramMessage.bodyMarkdown ||
     telegramMediaEnabled !== telegramMessage.mediaEnabled ||
-    telegramMediaUrl !== telegramMessage.mediaUrl
-  ));
-  const telegramDefaultApplied = Boolean(telegramMessage && (
-    telegramBodyMarkdown === telegramMessage.defaultBodyMarkdown &&
-    !telegramMediaEnabled &&
-    telegramMediaUrl === telegramMessage.defaultMediaUrl
+    telegramMediaUrl !== telegramMessage.mediaUrl ||
+    JSON.stringify(telegramEditedResource) !== JSON.stringify(telegramMessage.resource)
   ));
   const telegramPushNeeded = Boolean(telegramMessage && (
     !telegramMessage.exists ||
@@ -1022,7 +1175,6 @@ export default function AdminApp({
           maintenanceText
         )
       : activeTitle;
-  const categoryTopLabel = categoryText.topLabel;
   const isConvertingContentItem = pendingConvertItem
     ? writeLockedEntityKeys.has(
         getAdminWriteEntityKey("content-item", pendingConvertItem.id)
@@ -1038,32 +1190,8 @@ export default function AdminApp({
   const isInitialTelegramPushLoad =
     adminView === "push" && !hasLoadedTelegramPushes;
   const showTelegramPushSkeletons = isInitialTelegramPushLoad;
-  const canFillGitHubMetadata = isGitHubRepoUrl(form.url);
+  const canFillGitHubMetadata = toolGitHub.canLoad;
   const githubMetadataDetailText = getGitHubMetadataDetailText(locale);
-  const githubMetadataDetailItems = githubMetadataPreview
-    ? [
-        {
-          label: githubMetadataDetailText.stars,
-          value: formatGitHubCount(githubMetadataPreview.stars)
-        },
-        {
-          label: githubMetadataDetailText.forks,
-          value: formatGitHubCount(githubMetadataPreview.forks)
-        },
-        {
-          label: githubMetadataDetailText.language,
-          value: githubMetadataPreview.language || "-"
-        },
-        {
-          label: githubMetadataDetailText.license,
-          value: githubMetadataPreview.license || "-"
-        },
-        {
-          label: githubMetadataDetailText.updatedAt,
-          value: formatGitHubUpdatedAt(githubMetadataPreview.updatedAt) || "-"
-        }
-      ]
-    : [];
 
   const setStatus = useCallback((message: string) => {
     if (!message) {
@@ -1180,108 +1308,12 @@ export default function AdminApp({
     localStorage.setItem(ADMIN_VIEW_STATE_STORAGE_KEYS.content.source, contentSourceFilter);
   }, [contentCategoryFilter, contentSearch, contentSourceFilter]);
 
-  function invalidateGitHubMetadataRequest(nextUrl = "") {
-    githubMetadataRequestId.current += 1;
-    lastGitHubMetadataUrl.current = "";
-    lastAppliedGitHubMetadata.current = null;
-    setIsGitHubMetadataLoading(false);
-    setIsGitHubMetadataPreviewLoading(isGitHubRepoUrl(nextUrl));
-    setGithubMetadataPreviewFailed(false);
-    setGithubMetadataPreview(null);
-  }
-
-  async function fillGitHubMetadata(
-    sourceUrl: string,
-    options: {
-      force?: boolean;
-      notify?: boolean;
-      overwrite?: boolean;
-    } = {}
-  ) {
-    const {
-      force = false,
-      notify = true,
-      overwrite = false
-    } = options;
-    const normalizedUrl = normalizeHttpUrlInput(sourceUrl);
-    const repoPath = getGitHubRepoPath(normalizedUrl);
-    const requestSnapshot = form;
-
-    if (!repoPath) {
-      setIsGitHubMetadataPreviewLoading(false);
-      return;
-    }
-
-    if (!force && lastGitHubMetadataUrl.current === repoPath) {
-      return;
-    }
-
-    const requestId = githubMetadataRequestId.current + 1;
-    githubMetadataRequestId.current = requestId;
-    setIsGitHubMetadataLoading(true);
-    setIsGitHubMetadataPreviewLoading(true);
-    setGithubMetadataPreviewFailed(false);
-
-    try {
-      const metadata = await loadGitHubToolMetadata(normalizedUrl, token, {
-        forceRefresh: force
-      });
-
-      if (githubMetadataRequestId.current !== requestId) {
-        return;
-      }
-
-      lastGitHubMetadataUrl.current = repoPath;
-      const previousMetadata = lastAppliedGitHubMetadata.current?.metadata ?? null;
-      setForm((current) => {
-        const currentUrl = normalizeHttpUrlInput(current.url);
-
-        if (getGitHubRepoPath(currentUrl) !== repoPath) {
-          return current;
-        }
-
-        return applyGitHubMetadataToForm(
-          current,
-          metadata,
-          normalizedUrl,
-          previousMetadata,
-          overwrite,
-          requestSnapshot
-        );
-      });
-      lastAppliedGitHubMetadata.current = {
-        metadata,
-        url: normalizedUrl
-      };
-      setGithubMetadataPreview(metadata);
-      setGithubMetadataPreviewFailed(false);
-
-      if (notify) {
-        setStatus(t.status.githubMetadataApplied);
-      }
-    } catch (error) {
-      if (githubMetadataRequestId.current === requestId) {
-        setGithubMetadataPreviewFailed(true);
-        if (notify) {
-          setStatus(getLocalizedErrorMessage(error, t));
-        }
-      }
-    } finally {
-      if (githubMetadataRequestId.current === requestId) {
-        setIsGitHubMetadataLoading(false);
-        setIsGitHubMetadataPreviewLoading(false);
-      }
-    }
-  }
-
   function moveGitHubUrlFromName(value: string) {
     const normalizedUrl = normalizeHttpUrlInput(value);
 
-    if (!getGitHubRepoPath(normalizedUrl)) {
-      return false;
-    }
+    if (!isGitHubRepoUrl(normalizedUrl)) return false;
 
-    invalidateGitHubMetadataRequest(normalizedUrl);
+    toolGitHub.reset(normalizedUrl);
     setForm((current) => ({
       ...current,
       name: "",
@@ -1290,66 +1322,6 @@ export default function AdminApp({
 
     return true;
   }
-
-  useEffect(() => {
-    if (!formOpen || editingTool) {
-      return;
-    }
-
-    const normalizedUrl = normalizeHttpUrlInput(form.url);
-
-    if (!getGitHubRepoPath(normalizedUrl)) {
-      setIsGitHubMetadataPreviewLoading(false);
-      return;
-    }
-
-    setIsGitHubMetadataPreviewLoading(true);
-    setGithubMetadataPreviewFailed(false);
-    const timer = window.setTimeout(() => {
-      void fillGitHubMetadata(normalizedUrl);
-    }, 800);
-
-    return () => window.clearTimeout(timer);
-  }, [editingTool, form.url, formOpen, token]);
-
-  useEffect(() => {
-    if (!formOpen || !editingTool) {
-      return;
-    }
-
-    const normalizedUrl = normalizeHttpUrlInput(form.url);
-
-    if (!getGitHubRepoPath(normalizedUrl)) {
-      setIsGitHubMetadataPreviewLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsGitHubMetadataPreviewLoading(true);
-    setGithubMetadataPreviewFailed(false);
-    const timer = window.setTimeout(async () => {
-      try {
-        const metadata = await loadGitHubToolMetadata(normalizedUrl, token);
-
-        if (!cancelled) {
-          setGithubMetadataPreview(metadata);
-          setGithubMetadataPreviewFailed(false);
-          setIsGitHubMetadataPreviewLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setGithubMetadataPreview(null);
-          setGithubMetadataPreviewFailed(true);
-          setIsGitHubMetadataPreviewLoading(false);
-        }
-      }
-    }, 500);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [editingTool, form.url, formOpen, token]);
 
   async function refreshAdminCategories() {
     const requestId = adminCategoryLoadRequestRef.current + 1;
@@ -1406,13 +1378,18 @@ export default function AdminApp({
     scope: AdminCategoryScope,
     category: string
   ) {
+    if (scope === "push" && TELEGRAM_PUSH_FIXED_FILTERS.includes(normalizeAdminCategoryValue(category))) {
+      return;
+    }
     const currentSettings = adminCategorySettingsRef.current;
     const currentCategories =
       scope === "tools"
         ? adminFilterCategories
         : scope === "articles"
           ? articleFilterCategories
-          : contentFilterCategories;
+          : scope === "push"
+            ? pushExistingCategories
+            : contentFilterCategories;
     const nextOrder = moveAdminCategoryInList(
       currentCategories,
       category
@@ -1437,6 +1414,10 @@ export default function AdminApp({
     category: string
   ) {
     const normalized = normalizeAdminCategoryValue(category);
+
+    if (scope === "push" && TELEGRAM_PUSH_FIXED_FILTERS.includes(normalized)) {
+      return;
+    }
 
     if (isAllCategoryValue(normalized)) {
       setPendingCategoryAction({
@@ -1490,6 +1471,8 @@ export default function AdminApp({
         );
       }
 
+      if (scope === "push") return telegramPushRecords.length;
+
       return (
         contentSources.length +
         Object.values(contentCategoryCounts).reduce(
@@ -1515,6 +1498,12 @@ export default function AdminApp({
           normalizeAdminCategoryValue(name) === normalized ? total + count : total,
         0
       );
+    }
+
+    if (scope === "push") {
+      return telegramPushRecords.filter((record) =>
+        normalizeAdminCategoryValue(record.resource?.category ?? "") === normalized
+      ).length;
     }
 
     const sourceCount = contentSources.filter(
@@ -1544,7 +1533,9 @@ export default function AdminApp({
         ? adminFilterCategories
         : scope === "articles"
           ? articleExistingCategories
-          : contentExistingCategories;
+          : scope === "push"
+            ? pushExistingCategories
+            : contentExistingCategories;
 
     return categories.filter((item) => {
       const next = normalizeAdminCategoryValue(item);
@@ -1600,6 +1591,19 @@ export default function AdminApp({
         setConvertArticleCategory(replacement);
       }
 
+      return;
+    }
+
+    if (scope === "push") {
+      if (normalizeAdminCategoryValue(telegramPushCategory) === normalized) {
+        setTelegramPushCategory(replacement || "All");
+      }
+      if (normalizeAdminCategoryValue(telegramCategory) === normalized) {
+        setTelegramCategory(replacement);
+      }
+      if (normalizeAdminCategoryValue(telegramQuickCategory) === normalized) {
+        setTelegramQuickCategory(replacement);
+      }
       return;
     }
 
@@ -1661,6 +1665,8 @@ export default function AdminApp({
           await refreshArticles();
           await refreshContent();
         });
+      } else if (scope === "push") {
+        await refreshAfterMutation(refreshTelegramPushRecords);
       } else {
         await refreshAfterMutation(() => refreshContent());
       }
@@ -1754,6 +1760,44 @@ export default function AdminApp({
 
     return names;
   }, [adminArticleCategoryCounts, adminArticles, adminCategorySettings.articles, t]);
+  const pushExistingCategories = useMemo(
+    () => uniqueAdminCategories(sortCategoriesBySettings(
+      [
+        ...adminCategorySettings.push,
+        ...telegramPushCategoryOptions,
+        ...telegramPushRecords.map((record) => record.resource?.category ?? "")
+      ],
+      adminCategorySettings.push,
+      t
+    )),
+    [adminCategorySettings.push, t, telegramPushCategoryOptions, telegramPushRecords]
+  );
+  const pushCategoryOptions = useMemo(
+    () => uniqueAdminCategories(sortCategoriesBySettings(
+      [...pushExistingCategories, telegramCategory],
+      adminCategorySettings.push,
+      t
+    )),
+    [adminCategorySettings.push, pushExistingCategories, t, telegramCategory]
+  );
+  const telegramEditorCategoryOptions = useMemo(
+    () => uniqueAdminCategories([
+      getTelegramPushDefaultFilter(telegramResource?.type ?? "custom"),
+      ...pushCategoryOptions
+    ]),
+    [pushCategoryOptions, telegramResource?.type]
+  );
+  const pushFilterCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...TELEGRAM_PUSH_FIXED_FILTERS, ...pushExistingCategories]
+            .map(normalizeAdminCategoryValue)
+            .filter(Boolean)
+        )
+      ),
+    [pushExistingCategories]
+  );
   const articleFilterCategories = useMemo(
     () =>
       Array.from(
@@ -2139,11 +2183,21 @@ export default function AdminApp({
   }
 
   function getTelegramPushRequestParams(cursor?: string) {
+    const sourceType: TelegramResourceType | undefined = telegramPushCategory === TELEGRAM_PUSH_TOOL_FILTER
+      ? "tool"
+      : telegramPushCategory === TELEGRAM_PUSH_ARTICLE_FILTER
+        ? "article"
+        : telegramPushCategory === TELEGRAM_PUSH_CONTENT_FILTER
+          ? "content"
+          : undefined;
     return {
       cursor,
       limit: TELEGRAM_PUSH_PAGE_SIZE,
       query: debouncedTelegramPushSearch.trim() || undefined,
-      resourceType: telegramPushType === "all" ? undefined : telegramPushType,
+      category: isAllCategoryValue(telegramPushCategory) || sourceType
+        ? undefined
+        : telegramPushCategory,
+      resourceType: sourceType,
       sort: telegramPushSortMode
     };
   }
@@ -2165,6 +2219,7 @@ export default function AdminApp({
       );
       if (telegramPushRequestGenerationRef.current !== generation) return;
       setTelegramPushRecords(page.records);
+      setTelegramPushCategoryOptions(page.categoryOptions);
       setTelegramPushHasMore(page.hasMore);
       telegramPushNextCursorRef.current = page.nextCursor;
     } catch (error) {
@@ -2210,6 +2265,7 @@ export default function AdminApp({
         page.records.forEach((record) => recordsById.set(record.id, record));
         return Array.from(recordsById.values());
       });
+      setTelegramPushCategoryOptions(page.categoryOptions);
       setTelegramPushHasMore(page.hasMore);
       telegramPushNextCursorRef.current = page.nextCursor;
     } catch (error) {
@@ -2300,12 +2356,13 @@ export default function AdminApp({
       adminCategoryLoadRequestRef.current += 1;
       mutationRefreshGenerationRef.current += 1;
       articleEditorLoadRequestRef.current += 1;
-      invalidateGitHubMetadataRequest();
+      toolGitHub.reset();
       invalidateContentPreview();
       adminCategorySavePendingRef.current.clear();
       adminCategoryRollbackRef.current = {};
       adminCategorySaveGenerationRef.current.tools += 1;
       adminCategorySaveGenerationRef.current.articles += 1;
+      adminCategorySaveGenerationRef.current.push += 1;
       adminCategorySaveGenerationRef.current.content += 1;
       setWriteLockedEntityKeys(new Set());
       setTools([]);
@@ -2346,6 +2403,7 @@ export default function AdminApp({
       telegramPushNextCursorRef.current = null;
       telegramPushLoadingCursorRef.current = null;
       setTelegramPushRecords([]);
+      setTelegramPushCategoryOptions([]);
       setTelegramPushHasMore(false);
       setIsLoadingTelegramPushes(false);
       setIsLoadingMoreTelegramPushes(false);
@@ -2445,7 +2503,7 @@ export default function AdminApp({
   }, [
     token,
     adminView,
-    telegramPushType,
+    telegramPushCategory,
     debouncedTelegramPushSearch,
     telegramPushSortMode
   ]);
@@ -2666,13 +2724,7 @@ export default function AdminApp({
     setEditingTool(null);
     setForm({ ...initialForm, category });
     setToolTagText(formatTagInputText(initialForm.tags));
-    lastGitHubMetadataUrl.current = "";
-    lastAppliedGitHubMetadata.current = null;
-    githubMetadataRequestId.current += 1;
-    setIsGitHubMetadataLoading(false);
-    setIsGitHubMetadataPreviewLoading(false);
-    setGithubMetadataPreviewFailed(false);
-    setGithubMetadataPreview(null);
+    toolGitHub.reset();
     setFormOpen(true);
   }
 
@@ -2683,23 +2735,12 @@ export default function AdminApp({
     setEditingTool(tool);
     setForm(nextForm);
     setToolTagText(formatTagInputText(nextForm.tags));
-    lastGitHubMetadataUrl.current = getGitHubRepoPath(tool.url);
-    lastAppliedGitHubMetadata.current = null;
-    githubMetadataRequestId.current += 1;
-    setIsGitHubMetadataLoading(false);
-    setIsGitHubMetadataPreviewLoading(isGitHubRepoUrl(tool.url));
-    setGithubMetadataPreviewFailed(false);
-    setGithubMetadataPreview(null);
+    toolGitHub.reset(tool.url);
     setFormOpen(true);
   }
 
   function closeToolEditor() {
-    githubMetadataRequestId.current += 1;
-    lastAppliedGitHubMetadata.current = null;
-    setIsGitHubMetadataLoading(false);
-    setIsGitHubMetadataPreviewLoading(false);
-    setGithubMetadataPreviewFailed(false);
-    setGithubMetadataPreview(null);
+    toolGitHub.reset();
     setFormOpen(false);
   }
 
@@ -2709,10 +2750,18 @@ export default function AdminApp({
 
   function closeTelegramMessageDialog() {
     if (telegramMessageSaving) return;
+    telegramGitHub.reset();
     setTelegramResource(null);
     setTelegramMessage(null);
     setIsCreatingTelegramPush(false);
     setTelegramBodyMarkdown("");
+    setTelegramDescription("");
+    setTelegramUrl("");
+    setTelegramDemoUrl("");
+    setTelegramImage("");
+    setTelegramCategory("");
+    setTelegramTagText("");
+    setTelegramSourceLoading(false);
     setTelegramMediaEnabled(false);
     setTelegramMediaUrl("");
     setTelegramMarkdownEditorMode(undefined);
@@ -2724,7 +2773,10 @@ export default function AdminApp({
     const record = pendingPushTelegramRecord;
     if (!record || isPushingTelegramRecord) return;
 
-    const actionKey = getAdminWriteEntityKey(record.resourceType, record.resourceId);
+    const actionKey = getAdminWriteEntityKey(
+      getTelegramWriteEntityScope(record.resourceType),
+      record.resourceId
+    );
     if (!acquireWriteAction(actionKey)) return;
     setIsPushingTelegramRecord(true);
     setStatus("");
@@ -2738,7 +2790,11 @@ export default function AdminApp({
         record.mediaUrl,
         locale,
         token,
-        record.title
+        {
+          category: record.resource?.category ?? "",
+          title: record.title,
+          resource: record.resource ?? undefined
+        }
       );
       setStatus(telegramText.sent);
       setPendingPushTelegramRecord(null);
@@ -2760,6 +2816,7 @@ export default function AdminApp({
       url: "",
       demoUrl: "",
       image: "",
+      category: "",
       tags: []
     };
     const defaultBody = buildTelegramPreviewMarkdown(
@@ -2769,8 +2826,9 @@ export default function AdminApp({
       locale
     );
     setTelegramResource(resource);
+    telegramGitHub.reset();
     setIsCreatingTelegramPush(true);
-    setTelegramCustomTitle(readTelegramBodyTitle(defaultBody));
+    setTelegramCustomTitle("");
     setTelegramMessage({
       exists: false,
       targetChanged: false,
@@ -2779,7 +2837,9 @@ export default function AdminApp({
       mediaEnabled: false,
       mediaUrl: "",
       defaultBodyMarkdown: defaultBody,
-      defaultMediaUrl: ""
+      defaultMediaUrl: "",
+      resource,
+      resourceExists: true
     });
     setTelegramBodyMarkdown(defaultBody);
     setTelegramMediaEnabled(false);
@@ -2791,8 +2851,10 @@ export default function AdminApp({
   }
 
   async function openTelegramQuickPush(resource: TelegramPushResource) {
-    if (isWriteEntityLocked(resource.type, resource.id)) return;
-    setTelegramQuickResource(resource);
+    if (isWriteEntityLocked(getTelegramWriteEntityScope(resource.type), resource.id)) return;
+    const defaultCategory = getTelegramPushDefaultFilter(resource.type);
+    setTelegramQuickResource({ ...resource, category: defaultCategory });
+    setTelegramQuickCategory(defaultCategory);
     setTelegramQuickMessage(null);
     setTelegramQuickMode("published");
     setTelegramQuickLoading(true);
@@ -2818,6 +2880,7 @@ export default function AdminApp({
     if (telegramQuickSaving) return;
     setTelegramQuickResource(null);
     setTelegramQuickMessage(null);
+    setTelegramQuickCategory("");
   }
 
   async function confirmTelegramQuickPush() {
@@ -2825,10 +2888,15 @@ export default function AdminApp({
     const message = telegramQuickMessage;
     if (!resource || !message || telegramQuickLoading || telegramQuickSaving) return;
 
-    const actionKey = getAdminWriteEntityKey(resource.type, resource.id);
+    const actionKey = getAdminWriteEntityKey(
+      getTelegramWriteEntityScope(resource.type),
+      resource.id
+    );
     if (!acquireWriteAction(actionKey)) return;
     setTelegramQuickSaving(true);
     setStatus("");
+    const storedCategory = getTelegramStoredCategory(telegramQuickCategory);
+    const pushResource = { ...resource, category: storedCategory };
 
     try {
       if (telegramQuickMode === "published") {
@@ -2839,7 +2907,8 @@ export default function AdminApp({
           message.mediaEnabled,
           message.mediaUrl,
           locale,
-          token
+          token,
+          { resource: pushResource, category: storedCategory }
         );
         setStatus(telegramText.sent);
       } else {
@@ -2850,12 +2919,14 @@ export default function AdminApp({
           message.mediaEnabled,
           message.mediaUrl,
           locale,
-          token
+          token,
+          { resource: pushResource, category: storedCategory }
         );
         setStatus(telegramText.saved);
       }
       setTelegramQuickResource(null);
       setTelegramQuickMessage(null);
+      setTelegramQuickCategory("");
       if (adminView === "push") void refreshTelegramPushRecords();
     } catch (error) {
       setStatus(getLocalizedErrorMessage(error, t));
@@ -2866,8 +2937,14 @@ export default function AdminApp({
   }
 
   async function openTelegramMessageDialog(resource: TelegramPushResource) {
-    if (isWriteEntityLocked(resource.type, resource.id)) return;
+    if (isWriteEntityLocked(getTelegramWriteEntityScope(resource.type), resource.id)) return;
     setTelegramCustomTitle(resource.title);
+    setTelegramDescription(resource.description);
+    setTelegramUrl(resource.url);
+    setTelegramDemoUrl(resource.demoUrl);
+    setTelegramImage(resource.image);
+    setTelegramCategory(getTelegramDisplayCategory(resource.type, resource.category));
+    setTelegramTagText(formatTagInputText(resource.tags));
     const defaultBody = buildTelegramPreviewMarkdown(
       resource,
       createDefaultTelegramBody(resource),
@@ -2885,7 +2962,9 @@ export default function AdminApp({
       mediaEnabled: false,
       mediaUrl: defaultMediaUrl,
       defaultBodyMarkdown: defaultBody,
-      defaultMediaUrl
+      defaultMediaUrl,
+      resource,
+      resourceExists: true
     });
     setTelegramBodyMarkdown(defaultBody);
     setTelegramMediaEnabled(false);
@@ -2903,8 +2982,15 @@ export default function AdminApp({
         locale
       );
       setTelegramMessage(message);
+      setTelegramResource(message.resource);
       setTelegramBodyMarkdown(message.bodyMarkdown);
-      setTelegramCustomTitle(readTelegramBodyTitle(message.bodyMarkdown));
+      setTelegramCustomTitle(message.resource.title);
+      setTelegramDescription(message.resource.description);
+      setTelegramUrl(message.resource.url);
+      setTelegramDemoUrl(message.resource.demoUrl);
+      setTelegramImage(message.resource.image);
+      setTelegramCategory(getTelegramDisplayCategory(message.resource.type, message.resource.category));
+      setTelegramTagText(formatTagInputText(message.resource.tags));
       setTelegramMediaEnabled(message.mediaEnabled);
       setTelegramMediaUrl(message.mediaUrl);
       setTelegramMessageErrorCode(
@@ -2919,13 +3005,37 @@ export default function AdminApp({
     }
   }
 
-  function restoreDefaultTelegramMessage() {
-    if (!telegramMessage || telegramMessageLoading || telegramMessageSaving) return;
-    setTelegramBodyMarkdown(telegramMessage.defaultBodyMarkdown);
-    setTelegramMediaUrl(telegramMessage.defaultMediaUrl);
-    setTelegramMediaEnabled(false);
-    setTelegramMarkdownEditorMode("preview");
-    setStatus(telegramText.restored);
+  async function refreshTelegramSource() {
+    if (!telegramResource || telegramResource.type === "custom" || telegramSourceLoading) return;
+    setTelegramSourceLoading(true);
+    try {
+      const source = await loadTelegramSource(telegramResource.type, telegramResource.id, token, locale);
+      const refreshedResource = {
+        ...source.resource,
+        category: getTelegramStoredCategory(telegramCategory)
+      };
+      setTelegramResource(refreshedResource);
+      setTelegramMessage((current) => current ? {
+        ...current,
+        resource: refreshedResource,
+        defaultBodyMarkdown: source.bodyMarkdown,
+        defaultMediaUrl: source.mediaUrl
+      } : current);
+      setTelegramCustomTitle(source.resource.title);
+      setTelegramDescription(source.resource.description);
+      setTelegramUrl(source.resource.url);
+      setTelegramDemoUrl(source.resource.demoUrl);
+      setTelegramImage(source.resource.image);
+      setTelegramTagText(formatTagInputText(source.resource.tags));
+      setTelegramBodyMarkdown(source.bodyMarkdown);
+      setTelegramMediaUrl(source.mediaUrl);
+      setTelegramMediaEnabled(false);
+      setStatus(locale === "zh" ? "已读取最新信息。" : "Latest information loaded.");
+    } catch (error) {
+      setStatus(getLocalizedErrorMessage(error, t));
+    } finally {
+      setTelegramSourceLoading(false);
+    }
   }
 
   function handleTelegramMediaEnabledChange(enabled: boolean) {
@@ -2947,7 +3057,7 @@ export default function AdminApp({
       return;
     }
     const actionKey = getAdminWriteEntityKey(
-      telegramResource.type,
+      getTelegramWriteEntityScope(telegramResource.type),
       telegramResource.id
     );
     if (!acquireWriteAction(actionKey)) return;
@@ -2964,9 +3074,20 @@ export default function AdminApp({
         normalizedTelegramMediaUrl,
         locale,
         token,
-        telegramCustomTitle
+        {
+          category: getTelegramStoredCategory(telegramCategory),
+          title: telegramCustomTitle,
+          resource: telegramEditedResource ?? undefined
+        }
       );
       setTelegramMessage(message);
+      setTelegramResource(message.resource);
+      setTelegramDescription(message.resource.description);
+      setTelegramUrl(message.resource.url);
+      setTelegramDemoUrl(message.resource.demoUrl);
+      setTelegramImage(message.resource.image);
+      setTelegramCategory(getTelegramDisplayCategory(message.resource.type, message.resource.category));
+      setTelegramTagText(formatTagInputText(message.resource.tags));
       setTelegramBodyMarkdown(message.bodyMarkdown);
       setTelegramMediaEnabled(message.mediaEnabled);
       setTelegramMediaUrl(message.mediaUrl);
@@ -2996,7 +3117,7 @@ export default function AdminApp({
       return;
     }
     const actionKey = getAdminWriteEntityKey(
-      telegramResource.type,
+      getTelegramWriteEntityScope(telegramResource.type),
       telegramResource.id
     );
     if (!acquireWriteAction(actionKey)) return;
@@ -3014,7 +3135,11 @@ export default function AdminApp({
             normalizedTelegramMediaUrl,
             locale,
             token,
-            telegramCustomTitle
+            {
+              category: getTelegramStoredCategory(telegramCategory),
+              title: telegramCustomTitle,
+              resource: telegramEditedResource ?? undefined
+            }
           )
         : await sendTelegramMessage(
             telegramResource.type,
@@ -3024,9 +3149,20 @@ export default function AdminApp({
             normalizedTelegramMediaUrl,
             locale,
             token,
-            telegramCustomTitle
+            {
+              category: getTelegramStoredCategory(telegramCategory),
+              title: telegramCustomTitle,
+              resource: telegramEditedResource ?? undefined
+            }
           );
       setTelegramMessage(message);
+      setTelegramResource(message.resource);
+      setTelegramDescription(message.resource.description);
+      setTelegramUrl(message.resource.url);
+      setTelegramDemoUrl(message.resource.demoUrl);
+      setTelegramImage(message.resource.image);
+      setTelegramCategory(getTelegramDisplayCategory(message.resource.type, message.resource.category));
+      setTelegramTagText(formatTagInputText(message.resource.tags));
       setStatus(
         telegramMessage.exists ? telegramText.updated : telegramText.sent
       );
@@ -3064,7 +3200,7 @@ export default function AdminApp({
       return;
     }
     const actionKey = getAdminWriteEntityKey(
-      telegramResource.type,
+      getTelegramWriteEntityScope(telegramResource.type),
       telegramResource.id
     );
     if (!acquireWriteAction(actionKey)) return;
@@ -3193,8 +3329,7 @@ export default function AdminApp({
     event.preventDefault();
     const actionKey = getAdminWriteEntityKey("tool", editingTool?.id);
     if (!acquireWriteAction(actionKey)) return;
-    githubMetadataRequestId.current += 1;
-    setIsGitHubMetadataLoading(false);
+    toolGitHub.reset();
     setIsSaving(true);
     setStatus("");
 
@@ -3974,7 +4109,7 @@ export default function AdminApp({
                 }}
                 onSearchChange={setAdminSearch}
                 categoryControl={<AdminCategoryFilter
-                  allLabel={categoryTopLabel}
+                  allLabel={categoryText.toolLabel}
                   categories={adminFilterCategories}
                   categoryText={categoryText}
                   onDeleteCategory={(category) =>
@@ -4007,7 +4142,7 @@ export default function AdminApp({
                 }}
                 onSearchChange={setArticleSearch}
                 categoryControl={<AdminCategoryFilter
-                  allLabel={categoryTopLabel}
+                  allLabel={categoryText.articleLabel}
                   categories={articleFilterCategories}
                   categoryText={categoryText}
                   onDeleteCategory={(category) =>
@@ -4043,7 +4178,7 @@ export default function AdminApp({
                 }}
                 onSearchChange={setContentSearch}
                 categoryControl={<AdminCategoryFilter
-                  allLabel={categoryTopLabel}
+                  allLabel={categoryText.contentLabel}
                   categories={contentFilterCategories}
                   categoryText={categoryText}
                   onDeleteCategory={(category) =>
@@ -4064,38 +4199,31 @@ export default function AdminApp({
             ) : null}
             {adminView === "push" ? (
               <AdminFilterBar
-                categoryControl={
-                  <AdminCategoryFilter
-                    allLabel={telegramText.management.filterAll}
-                    allowCreate={false}
-                    categories={TELEGRAM_PUSH_TYPE_OPTIONS}
-                    categoryText={categoryText}
-                    labelFor={(category) =>
-                      isAllCategoryValue(category)
-                        ? telegramText.management.filterAll
-                        : category === "tool"
-                          ? telegramText.management.typeTool
-                          : category === "article"
-                            ? telegramText.management.typeArticle
-                            : telegramText.management.typeCustom
+                categoryControl={<AdminCategoryFilter
+                  allLabel={categoryText.pushLabel}
+                  fixedCategories={TELEGRAM_PUSH_FIXED_FILTERS}
+                  categories={pushFilterCategories}
+                  categoryText={categoryText}
+                  labelFor={(category) =>
+                    getTelegramPushCategoryLabel(category, telegramText, t)
+                  }
+                  onDeleteCategory={(category) => void deleteAdminCategory("push", category)}
+                  onMoveCategory={(category) => void moveAdminCategory("push", category)}
+                  onChange={(category) => {
+                    setTelegramPushCategory(category);
+                    if (!TELEGRAM_PUSH_FIXED_FILTERS.includes(category)) {
+                      void rememberAdminCategory("push", category);
                     }
-                    onChange={(category) => {
-                      setTelegramPushType(
-                        isAllCategoryValue(category)
-                          ? "all"
-                          : (category as TelegramResourceType)
-                      );
-                    }}
-                    t={t}
-                    value={telegramPushType}
-                  />
-                }
+                  }}
+                  t={t}
+                  value={telegramPushCategory}
+                />}
                 clearLabel={t.actions.clearFilters}
                 hasActiveFilter={
-                  telegramPushType !== "all" || Boolean(telegramPushSearch.trim())
+                  !isAllCategoryValue(telegramPushCategory) || Boolean(telegramPushSearch.trim())
                 }
                 onClear={() => {
-                  setTelegramPushType("all");
+                  setTelegramPushCategory("All");
                   setTelegramPushSearch("");
                   setDebouncedTelegramPushSearch("");
                 }}
@@ -4129,14 +4257,7 @@ export default function AdminApp({
           {adminView === "tools" && (
             isLoadingTools && !hasLoadedTools ? (
               <SkeletonVisibility visible={showAdminToolSkeletons}>
-                <section className="admin-tool-grid" aria-label={t.admin.manageTools}>
-                  {Array.from({ length: 12 }).map((_, index) => (
-                    <AdminToolCardSkeleton
-                      key={index}
-                      telegramEnabled={telegramSettings.enabled}
-                    />
-                  ))}
-                </section>
+                <AdminResourceCardSkeletonGrid ariaLabel={t.admin.manageTools} />
               </SkeletonVisibility>
             ) : toolsLoadError && tools.length === 0 ? (
               <AdminInitialLoadError
@@ -4200,14 +4321,7 @@ export default function AdminApp({
           {adminView === "articles" && (
             isLoadingArticles && !hasLoadedArticles ? (
               <SkeletonVisibility visible={showAdminArticleSkeletons}>
-                <section className="admin-tool-grid" aria-label={articleText.adminTitle}>
-                  {Array.from({ length: 8 }).map((_, index) => (
-                    <AdminArticleCardSkeleton
-                      key={index}
-                      telegramEnabled={telegramSettings.enabled}
-                    />
-                  ))}
-                </section>
+                <AdminResourceCardSkeletonGrid ariaLabel={articleText.adminTitle} />
               </SkeletonVisibility>
             ) : articlesLoadError && adminArticles.length === 0 ? (
               <AdminInitialLoadError
@@ -4306,6 +4420,11 @@ export default function AdminApp({
               isLoadingMoreContent={isLoadingMoreContent}
               hasMoreContent={contentItemsHasMore}
               onConvertItem={openConvertContentItem}
+              onTelegram={(item) =>
+                void openTelegramQuickPush(
+                  createTelegramContentResource(item, window.location.origin)
+                )
+              }
               onDeleteSource={(source) => {
                 if (!isWriteEntityLocked("content-source", source.id)) {
                   setPendingDeleteContentSource(source);
@@ -4326,6 +4445,8 @@ export default function AdminApp({
               onAddSource={openCreateContentSource}
               showSkeletons={showAdminContentSkeletons}
               t={t}
+              telegramEnabled={telegramSettings.enabled}
+              telegramText={telegramText}
               visibleContentItems={visibleContentItems}
               writeLockedEntityKeys={writeLockedEntityKeys}
             />
@@ -4334,7 +4455,7 @@ export default function AdminApp({
           {adminView === "push" ? (
             <AdminTelegramPushPanel
               hasActiveFilter={
-                telegramPushType !== "all" || Boolean(debouncedTelegramPushSearch)
+                !isAllCategoryValue(telegramPushCategory) || Boolean(debouncedTelegramPushSearch)
               }
               hasMore={telegramPushHasMore}
               isLoading={
@@ -4349,7 +4470,7 @@ export default function AdminApp({
                 }
               }}
               onClearFilters={() => {
-                setTelegramPushType("all");
+                setTelegramPushCategory("All");
                 setTelegramPushSearch("");
                 setDebouncedTelegramPushSearch("");
               }}
@@ -4357,6 +4478,12 @@ export default function AdminApp({
               onLoadMore={() => void loadMoreTelegramPushRecords()}
               onOpenSettings={openServiceSettings}
               onPush={setPendingPushTelegramRecord}
+              onPushedStatus={() =>
+                onNotify({
+                  message: telegramText.management.pushedNotice,
+                  tone: "info"
+                })
+              }
               onRetry={() => void refreshTelegramPushRecords()}
               onView={setViewingTelegramPush}
               records={telegramPushRecords}
@@ -4424,6 +4551,11 @@ export default function AdminApp({
         <Dialog
           closeDisabled={telegramQuickSaving}
           closeLabel={t.actions.close}
+          description={
+            telegramQuickMessage?.exists
+              ? telegramText.quickPush.alreadyPushed
+              : telegramText.quickPush.description
+          }
           descriptionId="telegram-quick-push-description"
           onClose={closeTelegramQuickPush}
           panelClassName="tool-editor-dialog"
@@ -4454,20 +4586,48 @@ export default function AdminApp({
           }
         >
           <div className="tool-form article-form">
-            <p className="form-field-help" id="telegram-quick-push-description">
-              {telegramQuickMessage?.exists
-                ? telegramText.quickPush.alreadyPushed
-                : telegramText.quickPush.description}
-            </p>
             {!telegramQuickLoading && !telegramQuickMessage?.exists ? (
-              <PublishModeField
-                disabled={telegramQuickSaving}
-                draftLabel={telegramText.quickPush.draftLabel}
-                label={telegramText.quickPush.modeLabel}
-                onChange={setTelegramQuickMode}
-                publishedLabel={telegramText.quickPush.sendLabel}
-                value={telegramQuickMode}
-              />
+              <>
+                <PublishModeField
+                  disabled={telegramQuickSaving}
+                  draftLabel={telegramText.quickPush.draftLabel}
+                  label={telegramText.quickPush.modeLabel}
+                  onChange={setTelegramQuickMode}
+                  publishedLabel={telegramText.quickPush.sendLabel}
+                  value={telegramQuickMode}
+                />
+                <div className="tool-form-field">
+                  <span className="tool-form-label">
+                    {telegramText.categoryLabel}
+                  </span>
+                  <AdminCategoryFilter
+                    alignToTopOnOpen
+                    categories={uniqueAdminCategories([
+                      getTelegramPushDefaultFilter(telegramQuickResource.type),
+                      ...pushExistingCategories,
+                      telegramQuickCategory
+                    ])}
+                    categoryText={categoryText}
+                    className="tool-form-category-filter"
+                    fixedCategories={[
+                      getTelegramPushDefaultFilter(telegramQuickResource.type)
+                    ]}
+                    labelFor={(category) =>
+                      getTelegramPushCategoryLabel(category, telegramText, t)
+                    }
+                    onChange={(category) => {
+                      setTelegramQuickCategory(category);
+                      if (!isTelegramPushSourceFilter(category)) {
+                        void rememberAdminCategory("push", category);
+                      }
+                    }}
+                    onDeleteCategory={(category) => void deleteAdminCategory("push", category)}
+                    onMoveCategory={(category) => void moveAdminCategory("push", category)}
+                    t={t}
+                    value={telegramQuickCategory}
+                  />
+                </div>
+              </>
             ) : null}
             <div className="tool-form-field telegram-message-preview-field">
               <span className="tool-form-label">{telegramText.previewTitle}</span>
@@ -4498,23 +4658,16 @@ export default function AdminApp({
           closeDisabled={telegramMessageSaving}
           title={telegramText.title}
           closeLabel={t.actions.close}
+          description={
+            telegramResource.type === "custom"
+              ? telegramText.customDescription
+              : telegramText.description
+          }
+          descriptionId="telegram-message-dialog-description"
           onClose={closeTelegramMessageDialog}
           panelClassName="tool-editor-dialog telegram-message-dialog"
           footer={
             <>
-              <button
-                className="ghost-button telegram-restore-default"
-                disabled={
-                  telegramMessageLoading ||
-                  telegramMessageSaving ||
-                  !telegramMessage ||
-                  telegramDefaultApplied
-                }
-                type="button"
-                onClick={restoreDefaultTelegramMessage}
-              >
-                {telegramText.restoreDefault}
-              </button>
               <button
                 className="ghost-button"
                 disabled={
@@ -4566,17 +4719,50 @@ export default function AdminApp({
               </div>
             </div>
           ) : (
-            <div className="telegram-message-editor tool-form">
-              <p className="telegram-message-description">
-                {telegramResource.type === "custom"
-                  ? telegramText.customDescription
-                  : telegramText.description}
-              </p>
-              <div className="tool-form-field">
-                <div className="admin-markdown-editor-heading">
-                  <label htmlFor="telegram-custom-title">
-                    {telegramText.customTitleLabel}
-                  </label>
+            <>
+              <EditorTopActions>
+                {telegramResource.type === "custom" &&
+                isCreatingTelegramPush &&
+                telegramGitHub.canLoad ? (
+                  <AdminGitHubMetadataButton
+                    disabled={telegramGitHub.loading}
+                    label={t.form.githubMetadata}
+                    onClick={() =>
+                      void telegramGitHub.load(telegramUrl, {
+                        force: true,
+                        apply: true,
+                        notify: true,
+                        overwrite: true
+                      })
+                    }
+                  />
+                ) : null}
+                {telegramResource.type !== "custom" ? (
+                  <button
+                    className="ghost-button tool-editor-action-button"
+                    disabled={telegramMessageLoading || telegramMessageSaving || telegramSourceLoading}
+                    type="button"
+                    aria-label={telegramText.syncSourceHint}
+                    title={telegramText.syncSourceHint}
+                    onClick={() => void refreshTelegramSource()}
+                  >
+                    <RefreshCw size={16} />
+                    <span>{telegramText.syncSource}</span>
+                  </button>
+                ) : null}
+                <BooleanSegmentedToggle
+                  className="telegram-media-status-toggle"
+                  disabled={telegramMessageLoading || telegramMessageSaving}
+                  disabledLabel={telegramText.mediaDisabled}
+                  enabledLabel={telegramText.mediaEnabled}
+                  onChange={handleTelegramMediaEnabledChange}
+                  value={telegramMediaEnabled}
+                />
+              </EditorTopActions>
+              <div className="telegram-message-editor tool-form">
+              <AdminTextField
+                disabled={telegramMessageLoading || telegramMessageSaving}
+                headingAside={
                   <span
                     aria-busy={telegramMessageLoading}
                     aria-live="polite"
@@ -4586,22 +4772,156 @@ export default function AdminApp({
                   >
                     {telegramText.statuses[telegramMessage.syncStatus]}
                   </span>
-                </div>
-                <input
-                  disabled={telegramMessageLoading || telegramMessageSaving}
-                  id="telegram-custom-title"
-                  maxLength={120}
-                  onChange={(event) => {
-                    const nextTitle = event.target.value;
-                    setTelegramCustomTitle(nextTitle);
-                    setTelegramBodyMarkdown((current) =>
-                      replaceTelegramBodyTitle(current, nextTitle)
-                    );
+                }
+                id="telegram-custom-title"
+                label={telegramText.customTitleLabel}
+                maxLength={120}
+                onChange={(nextTitle) => {
+                  setTelegramCustomTitle(nextTitle);
+                  setTelegramBodyMarkdown((current) =>
+                    syncTelegramBodyField(
+                      current,
+                      { title: nextTitle },
+                      telegramSettings.footerMarkdown,
+                      locale
+                    )
+                  );
+                }}
+                placeholder={t.form.namePlaceholder}
+                value={telegramCustomTitle}
+              />
+              <AdminTextareaField
+                disabled={telegramMessageLoading || telegramMessageSaving}
+                label={t.form.description}
+                onChange={(description) => {
+                  setTelegramDescription(description);
+                  setTelegramBodyMarkdown((current) =>
+                    syncTelegramBodyField(
+                      current,
+                      { description },
+                      telegramSettings.footerMarkdown,
+                      locale
+                    )
+                  );
+                }}
+                placeholder={t.form.descriptionPlaceholder}
+                rows={4}
+                value={telegramDescription}
+              />
+              <AdminUrlField
+                disabled={telegramMessageLoading || telegramMessageSaving}
+                  label={
+                    telegramResource.type === "article"
+                      ? (locale === "zh" ? "文章地址" : "Article URL")
+                      : telegramResource.type === "content"
+                        ? telegramText.contentUrlLabel
+                        : t.form.url
+                  }
+                onChange={(url) => {
+                  if (url !== telegramUrl) telegramGitHub.reset(url);
+                  setTelegramUrl(url);
+                  setTelegramBodyMarkdown((current) =>
+                    syncTelegramBodyField(
+                      current,
+                      { url, resourceType: telegramResource.type },
+                      telegramSettings.footerMarkdown,
+                      locale
+                    )
+                  );
+                }}
+                placeholder={
+                  telegramResource.type === "article"
+                    ? telegramText.articleUrlPlaceholder
+                    : telegramResource.type === "content"
+                      ? telegramText.contentUrlPlaceholder
+                      : t.form.urlPlaceholder
+                }
+                value={telegramUrl}
+              />
+              <AdminUrlField
+                disabled={telegramMessageLoading || telegramMessageSaving}
+                label={
+                  telegramResource.type === "content"
+                    ? telegramText.contentOriginalUrlLabel
+                    : t.form.demoUrl
+                }
+                onChange={(demoUrl) => {
+                  setTelegramDemoUrl(demoUrl);
+                  setTelegramBodyMarkdown((current) =>
+                    syncTelegramBodyField(
+                      current,
+                      { demoUrl, resourceType: telegramResource.type },
+                      telegramSettings.footerMarkdown,
+                      locale
+                    )
+                  );
+                }}
+                placeholder={
+                  telegramResource.type === "content"
+                    ? telegramText.contentOriginalUrlPlaceholder
+                    : t.form.demoUrlPlaceholder
+                }
+                value={telegramDemoUrl}
+              />
+              <AdminTagsField
+                disabled={telegramMessageLoading || telegramMessageSaving}
+                label={t.form.tags}
+                onChange={(tagText) => {
+                  setTelegramTagText(tagText);
+                  setTelegramBodyMarkdown((current) =>
+                    syncTelegramBodyField(
+                      current,
+                      { tags: parseArticleTagsInput(tagText) },
+                      telegramSettings.footerMarkdown,
+                      locale
+                    )
+                  );
+                }}
+                placeholder={t.form.tagsPlaceholder}
+                value={telegramTagText}
+              />
+              <AdminUrlField
+                disabled={telegramMessageLoading || telegramMessageSaving}
+                label={t.form.image}
+                onChange={setTelegramImage}
+                placeholder={t.form.imagePlaceholder}
+                value={telegramImage}
+              />
+              <div className="tool-form-field">
+                <span className="tool-form-label">{telegramText.categoryLabel}</span>
+                <AdminCategoryFilter
+                  allowCreate
+                  alignToTopOnOpen
+                  categories={telegramEditorCategoryOptions}
+                  categoryText={categoryText}
+                  className="tool-form-category-filter"
+                  fixedCategories={[getTelegramPushDefaultFilter(telegramResource.type)].filter(Boolean)}
+                  labelFor={(category) =>
+                    getTelegramPushCategoryLabel(category, telegramText, t)
+                  }
+                  onDeleteCategory={(category) => void deleteAdminCategory("push", category)}
+                  onChange={(category) => {
+                    setTelegramCategory(category);
+                    if (!isTelegramPushSourceFilter(category)) {
+                      void rememberAdminCategory("push", category);
+                    }
                   }}
-                  placeholder={telegramText.customTitlePlaceholder}
-                  value={telegramCustomTitle}
+                  t={t}
+                  value={telegramCategory}
                 />
               </div>
+              <AdminGitHubMetadataCard
+                canLoad={
+                  telegramResource.type === "custom" &&
+                  isCreatingTelegramPush &&
+                  telegramGitHub.canLoad
+                }
+                detailText={githubMetadataDetailText}
+                failed={telegramGitHub.failed}
+                loading={telegramGitHub.loading}
+                metadata={telegramGitHub.metadata}
+                previewLoading={telegramGitHub.previewLoading}
+              />
               {telegramMessageErrorCode ? (
                 <div className="telegram-message-action-error" role="alert">
                   <p>
@@ -4631,38 +4951,23 @@ export default function AdminApp({
                   ) : null}
                 </div>
               ) : null}
-              <TelegramMediaModeField
+              <AdminUrlField
+                className="telegram-media-url-field"
                 disabled={telegramMessageLoading || telegramMessageSaving}
-                disabledLabel={telegramText.mediaDisabled}
-                enabledLabel={telegramText.mediaEnabled}
-                label={telegramText.mediaLabel}
-                onChange={handleTelegramMediaEnabledChange}
-                value={telegramMediaEnabled}
-              />
-              <div className="tool-form-field telegram-media-url-field">
-                <label htmlFor="telegram-media-url">{telegramText.mediaUrlLabel}</label>
-                <input
-                  disabled={
-                    telegramMessageLoading ||
-                    telegramMessageSaving
-                  }
-                  id="telegram-media-url"
-                  inputMode="url"
-                  maxLength={2048}
-                  onBlur={(event) =>
-                    setTelegramMediaUrl(normalizeHttpUrlInput(event.currentTarget.value))
-                  }
-                  onChange={(event) => setTelegramMediaUrl(event.target.value)}
-                  placeholder={telegramText.mediaUrlPlaceholder}
-                  value={telegramMediaUrl}
-                />
+                id="telegram-media-url"
+                label={telegramText.mediaUrlLabel}
+                maxLength={2048}
+                onChange={setTelegramMediaUrl}
+                placeholder={telegramText.mediaUrlPlaceholder}
+                value={telegramMediaUrl}
+              >
                 <p className="telegram-media-help">{telegramText.mediaHelp}</p>
                 {!telegramMediaValid ? (
                   <p className="telegram-media-error" role="alert">
                     {telegramText.mediaInvalid}
                   </p>
                 ) : null}
-              </div>
+              </AdminUrlField>
               <AdminMarkdownEditor
                 actions={TELEGRAM_MARKDOWN_EDITOR_ACTIONS}
                 className="telegram-message-body-field"
@@ -4674,7 +4979,24 @@ export default function AdminApp({
                 mode={telegramMarkdownEditorMode}
                 onChange={(value) => {
                   setTelegramBodyMarkdown(value);
-                  setTelegramCustomTitle(readTelegramBodyTitle(value));
+                  const fields = readTelegramBodyFields(
+                    value,
+                    telegramSettings.footerMarkdown,
+                    locale,
+                    isCreatingTelegramPush
+                  );
+                  if (
+                    telegramResource.type === "custom" &&
+                    isCreatingTelegramPush &&
+                    fields.url !== telegramUrl
+                  ) {
+                    telegramGitHub.reset(fields.url);
+                  }
+                  setTelegramCustomTitle(fields.title);
+                  setTelegramDescription(fields.description);
+                  setTelegramUrl(fields.url);
+                  setTelegramDemoUrl(fields.demoUrl);
+                  setTelegramTagText(formatTagInputText(fields.tags));
                 }}
                 onModeChange={setTelegramMarkdownEditorMode}
                 preview={
@@ -4695,6 +5017,7 @@ export default function AdminApp({
                   )
                 }
                 previewClassName="telegram-message-preview"
+                placeholder={telegramText.bodyPlaceholder}
                 proxySettings={proxySettings}
                 rows={isCreatingTelegramPush ? 11 : 12}
                 text={t.markdownEditor}
@@ -4705,7 +5028,8 @@ export default function AdminApp({
                   <span className="is-invalid">{telegramText.tooLong}</span>
                 </div>
               ) : null}
-            </div>
+              </div>
+            </>
           )}
         </Dialog>
       ) : null}
@@ -4741,6 +5065,7 @@ export default function AdminApp({
                     url: "",
                     demoUrl: "",
                     image: viewingTelegramPush.mediaUrl,
+                    category: "",
                     tags: []
                   }
                 }
@@ -4754,6 +5079,8 @@ export default function AdminApp({
         <Dialog
           closeRequestRef={toolEditorCloseRequestRef}
           closeDisabled={isSaving}
+          description={editingTool ? t.form.editDescription : t.form.addDescription}
+          descriptionId="tool-editor-dialog-description"
           title={editingTool ? t.admin.editTool : t.actions.addTool}
           closeLabel={t.actions.close}
           onClose={() => {
@@ -4770,22 +5097,18 @@ export default function AdminApp({
         >
           <EditorTopActions>
             {canFillGitHubMetadata ? (
-              <button
-                aria-label={t.form.githubMetadata}
-                className="ghost-button tool-editor-action-button tool-github-metadata-button"
-                disabled={isGitHubMetadataLoading}
-                title={t.form.githubMetadata}
-                type="button"
+              <AdminGitHubMetadataButton
+                disabled={toolGitHub.loading}
+                label={t.form.githubMetadata}
                 onClick={() =>
-                  void fillGitHubMetadata(form.url, {
+                  void toolGitHub.load(form.url, {
                     force: true,
+                    apply: true,
+                    notify: true,
                     overwrite: true
                   })
                 }
-              >
-                <Github size={16} />
-                <span>{t.form.githubMetadata}</span>
-              </button>
+              />
             ) : null}
             <BooleanSegmentedToggle
               className="tool-featured-status-toggle"
@@ -4804,83 +5127,66 @@ export default function AdminApp({
           </EditorTopActions>
 
           <form id="admin-tool-editor-form" className="tool-form" onSubmit={handleSave}>
-            <label>
-              {t.form.name}
-              <input
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                onBlur={() => {
-                  moveGitHubUrlFromName(form.name);
-                }}
-                onPaste={(event) => {
+            <AdminTextField
+              label={t.form.name}
+              onBlurValue={moveGitHubUrlFromName}
+              onChange={(name) => setForm((current) => ({ ...current, name }))}
+              onPaste={(event) => {
                   const pastedText = event.clipboardData.getData("text");
 
                   if (moveGitHubUrlFromName(pastedText)) {
                     event.preventDefault();
                   }
-                }}
-                required
-              />
-            </label>
+              }}
+              placeholder={t.form.namePlaceholder}
+              required
+              value={form.name}
+            />
 
-            <div className="tool-form-field tool-url-field">
-              <div className="tool-form-field-head">
-                <label htmlFor="admin-tool-url">{t.form.url}</label>
-              </div>
-              <input
-                id="admin-tool-url"
-                value={form.url}
-                onChange={(event) => {
-                  const nextUrl = event.target.value;
-                  if (nextUrl !== form.url) {
-                    invalidateGitHubMetadataRequest(nextUrl);
-                  }
-                  setForm({ ...form, url: nextUrl });
-                }}
-                onBlur={() => {
-                  const url = normalizeHttpUrlInput(form.url);
-                  if (url !== form.url) invalidateGitHubMetadataRequest(url);
-                  setForm({ ...form, url });
-                }}
-                placeholder="https://example.com"
-                inputMode="url"
-                required
-              />
-            </div>
+            <AdminTextareaField
+              label={t.form.description}
+              onChange={(description) =>
+                setForm((current) => ({ ...current, description }))
+              }
+              placeholder={t.form.descriptionPlaceholder}
+              required
+              rows={4}
+              value={form.description}
+            />
 
-            <label>
-              {t.form.demoUrl}
-              <input
-                value={form.demoUrl}
-                onChange={(event) =>
-                  setForm({ ...form, demoUrl: event.target.value })
-                }
-                onBlur={() =>
-                  setForm((current) => ({
-                    ...current,
-                    demoUrl: normalizeHttpUrlInput(current.demoUrl)
-                  }))
-                }
-                placeholder={t.form.demoUrlPlaceholder}
-                inputMode="url"
-              />
-            </label>
+            <AdminUrlField
+              className="tool-url-field"
+              id="admin-tool-url"
+              label={t.form.url}
+              onChange={(nextUrl) => {
+                if (nextUrl !== form.url) toolGitHub.reset(nextUrl);
+                setForm((current) => ({ ...current, url: nextUrl }));
+              }}
+              placeholder={t.form.urlPlaceholder}
+              required
+              value={form.url}
+            />
 
-            <label>
-              {t.form.image}
-              <input
-                value={form.image}
-                onChange={(event) => setForm({ ...form, image: event.target.value })}
-                onBlur={() =>
-                  setForm((current) => ({
-                    ...current,
-                    image: normalizeHttpUrlInput(current.image)
-                  }))
-                }
-                placeholder={t.form.imagePlaceholder}
-                inputMode="url"
-              />
-            </label>
+            <AdminUrlField
+              label={t.form.demoUrl}
+              onChange={(demoUrl) => setForm((current) => ({ ...current, demoUrl }))}
+              placeholder={t.form.demoUrlPlaceholder}
+              value={form.demoUrl}
+            />
+
+            <AdminTagsField
+              label={t.form.tags}
+              onChange={setToolTagText}
+              placeholder={t.form.tagsPlaceholder}
+              value={toolTagText}
+            />
+
+            <AdminUrlField
+              label={t.form.image}
+              onChange={(image) => setForm((current) => ({ ...current, image }))}
+              placeholder={t.form.imagePlaceholder}
+              value={form.image}
+            />
 
             <div className="tool-form-field">
               <span className="tool-form-label">{t.form.category}</span>
@@ -4902,75 +5208,14 @@ export default function AdminApp({
               />
             </div>
 
-            <label>
-              {t.form.description}
-              <textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-                rows={4}
-                required
-              />
-            </label>
-
-            <label>
-              {t.form.tags}
-              <input
-                value={toolTagText}
-                onChange={(event) => setToolTagText(event.target.value)}
-                onPaste={(event) => {
-                  const text = event.clipboardData.getData("text");
-
-                  if (text.includes("\n") || /^\s*tags\s*:/i.test(text)) {
-                    event.preventDefault();
-                    setToolTagText(formatTagInputText(parseArticleTagsInput(text)));
-                  }
-                }}
-                placeholder={t.form.tagsPlaceholder}
-              />
-            </label>
-
-            {canFillGitHubMetadata || githubMetadataPreview ? (
-              <div
-                className={`tool-form-field tool-github-detail-field ${
-                  githubMetadataPreview ? "" : "is-placeholder"
-                }`}
-              >
-                <span className="tool-form-label">
-                  {githubMetadataDetailText.title}
-                </span>
-                <section className="tool-github-detail-card">
-                  {githubMetadataPreview ? (
-                    <>
-                      <div className="tool-github-detail-repo">
-                        <Github size={16} />
-                        <span>{githubMetadataPreview.fullName}</span>
-                      </div>
-                      <div className="tool-github-detail-grid">
-                        {githubMetadataDetailItems.map((item) => (
-                          <div className="tool-github-detail-item" key={item.label}>
-                            <span>{item.label}</span>
-                            <strong>{item.value}</strong>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="tool-github-detail-placeholder">
-                      <Github size={16} />
-                      <span>
-                        {isGitHubMetadataPreviewLoading || isGitHubMetadataLoading
-                          ? githubMetadataDetailText.loading
-                          : githubMetadataPreviewFailed
-                            ? githubMetadataDetailText.failed
-                            : githubMetadataDetailText.empty}
-                      </span>
-                    </div>
-                  )}
-                </section>
-              </div>
-            ) : null}
+            <AdminGitHubMetadataCard
+              canLoad={canFillGitHubMetadata}
+              detailText={githubMetadataDetailText}
+              failed={toolGitHub.failed}
+              loading={toolGitHub.loading}
+              metadata={toolGitHub.metadata}
+              previewLoading={toolGitHub.previewLoading}
+            />
 
           </form>
         </Dialog>
@@ -4980,6 +5225,12 @@ export default function AdminApp({
         <Dialog
           closeRequestRef={articleEditorCloseRequestRef}
           closeDisabled={isArticleSaving}
+          description={
+            editingArticle
+              ? articleText.editArticleDescription
+              : articleText.addArticleDescription
+          }
+          descriptionId="article-editor-dialog-description"
           title={editingArticle ? articleText.editArticle : articleText.addArticle}
           closeLabel={t.actions.close}
           onClose={() => {
@@ -5018,16 +5269,26 @@ export default function AdminApp({
             className="tool-form article-form"
             onSubmit={handleSaveArticle}
           >
-            <label>
-              {articleText.titleLabel}
-              <input
-                value={articleForm.title}
-                onChange={(event) =>
-                  setArticleForm({ ...articleForm, title: event.target.value })
-                }
-                required
-              />
-            </label>
+            <AdminTextField
+              label={articleText.titleLabel}
+              onChange={(title) =>
+                setArticleForm((current) => ({ ...current, title }))
+              }
+              placeholder={articleText.titlePlaceholder}
+              required
+              value={articleForm.title}
+            />
+
+            <AdminTextareaField
+              label={articleText.summaryLabel}
+              onChange={(summary) =>
+                setArticleForm((current) => ({ ...current, summary }))
+              }
+              placeholder={articleText.summaryPlaceholder}
+              required
+              rows={3}
+              value={articleForm.summary}
+            />
 
             <label>
               {articleText.slugLabel}
@@ -5047,22 +5308,21 @@ export default function AdminApp({
               <small className="form-field-help">{articleText.slugHelp}</small>
             </label>
 
-            <label>
-              {articleText.publishTimeLabel}
-              <input
-                type="datetime-local"
-                value={articleForm.publishedAt}
-                onChange={(event) =>
-                  setArticleForm({
-                    ...articleForm,
-                    publishedAt: event.target.value
-                  })
-                }
-              />
-              <small className="form-field-help">
-                {articleText.publishTimeHelp}
-              </small>
-            </label>
+            <AdminTagsField
+              label={articleText.tagsLabel}
+              onChange={setArticleTagText}
+              placeholder={articleText.tagsPlaceholder}
+              value={articleTagText}
+            />
+
+            <AdminUrlField
+              label={articleText.coverImageLabel}
+              onChange={(coverImage) =>
+                setArticleForm((current) => ({ ...current, coverImage }))
+              }
+              placeholder={articleText.coverImagePlaceholder}
+              value={articleForm.coverImage}
+            />
 
             <div className="tool-form-field">
               <span className="tool-form-label">{articleText.categoryLabel}</span>
@@ -5092,51 +5352,20 @@ export default function AdminApp({
             </div>
 
             <label>
-              {articleText.summaryLabel}
-              <textarea
-                value={articleForm.summary}
-                onChange={(event) =>
-                  setArticleForm({ ...articleForm, summary: event.target.value })
-                }
-                placeholder={articleText.summaryPlaceholder}
-                rows={3}
-                required
-              />
-            </label>
-
-            <label>
-              {articleText.coverImageLabel}
+              {articleText.publishTimeLabel}
               <input
-                value={articleForm.coverImage}
+                type="datetime-local"
+                value={articleForm.publishedAt}
                 onChange={(event) =>
-                  setArticleForm({ ...articleForm, coverImage: event.target.value })
+                  setArticleForm({
+                    ...articleForm,
+                    publishedAt: event.target.value
+                  })
                 }
-                onBlur={() =>
-                  setArticleForm((current) => ({
-                    ...current,
-                    coverImage: normalizeHttpUrlInput(current.coverImage)
-                  }))
-                }
-                placeholder={articleText.coverImagePlaceholder}
-                inputMode="url"
               />
-            </label>
-
-            <label>
-              {articleText.tagsLabel}
-              <input
-                value={articleTagText}
-                onChange={(event) => setArticleTagText(event.target.value)}
-                onPaste={(event) => {
-                  const text = event.clipboardData.getData("text");
-
-                  if (text.includes("\n") || /^\s*tags\s*:/i.test(text)) {
-                    event.preventDefault();
-                    setArticleTagText(formatTagInputText(parseArticleTagsInput(text)));
-                  }
-                }}
-                placeholder={articleText.tagsPlaceholder}
-              />
+              <small className="form-field-help">
+                {articleText.publishTimeHelp}
+              </small>
             </label>
 
             <AdminMarkdownEditor
@@ -5162,6 +5391,12 @@ export default function AdminApp({
         <Dialog
           closeRequestRef={contentSourceEditorCloseRequestRef}
           closeDisabled={isContentSourceSaving}
+          description={
+            editingContentSource
+              ? contentText.editSourceDescription
+              : contentText.addSourceDescription
+          }
+          descriptionId="content-source-dialog-description"
           title={
             editingContentSource
               ? contentText.editSource
@@ -5284,14 +5519,13 @@ export default function AdminApp({
               <input
                 value={contentSourceTagText}
                 onChange={(event) => setContentSourceTagText(event.target.value)}
+                onBlur={(event) => setContentSourceTagText(normalizeTagInputText(event.currentTarget.value))}
                 onPaste={(event) => {
                   const text = event.clipboardData.getData("text");
 
-                  if (text.includes("\n") || /^\s*tags\s*:/i.test(text)) {
+                  if (text.includes("\n") || /^\s*tags\s*:/i.test(text) || /#[^\s#]+/.test(text)) {
                     event.preventDefault();
-                    setContentSourceTagText(
-                      formatTagInputText(parseArticleTagsInput(text))
-                    );
+                    setContentSourceTagText(normalizeTagInputText(text));
                   }
                 }}
                 placeholder={contentText.tagsPlaceholder}
@@ -5320,6 +5554,11 @@ export default function AdminApp({
         <Dialog
           closeRequestRef={contentConvertCloseRequestRef}
           closeDisabled={isConvertingContentItem}
+          description={
+            pendingConvertItem.articleId
+              ? contentText.updateArticleDescription
+              : contentText.convertCategoryDescription
+          }
           descriptionId="content-convert-dialog-description"
           title={
             pendingConvertItem.articleId
@@ -5350,11 +5589,6 @@ export default function AdminApp({
           }
         >
           <div className="tool-form article-form">
-            <p className="form-field-help content-convert-description" id="content-convert-dialog-description">
-              {pendingConvertItem.articleId
-                ? contentText.updateArticleDescription
-                : contentText.convertCategoryDescription}
-            </p>
             <PublishModeField
               disabled={isConvertingContentItem}
               draftLabel={contentText.convertAsDraft}
@@ -5400,6 +5634,16 @@ export default function AdminApp({
 
       {pendingCategoryAction ? (
         <Dialog
+          description={
+            pendingCategoryIsAll
+              ? categoryText.clearDescription(
+                  categoryText.scopeLabel(pendingCategoryAction.scope),
+                  pendingCategoryAction.contentCount
+                )
+              : categoryText.occupiedDescription(
+                  pendingCategoryAction.contentCount
+                )
+          }
           descriptionId="category-action-dialog-description"
           title={
             pendingCategoryIsAll
@@ -5467,16 +5711,6 @@ export default function AdminApp({
           }
         >
           <div className="admin-category-action-body">
-            <p className="admin-confirm-dialog-description" id="category-action-dialog-description">
-              {pendingCategoryIsAll
-                ? categoryText.clearDescription(
-                    categoryText.scopeLabel(pendingCategoryAction.scope),
-                    pendingCategoryAction.contentCount
-                  )
-                : categoryText.occupiedDescription(
-                    pendingCategoryAction.contentCount
-                  )}
-            </p>
             {pendingCategoryIsAll ? null : (
               <div className="admin-category-action-field">
                 <div className="admin-category-action-copy">
@@ -5643,6 +5877,7 @@ function AdminTelegramPushPanel({
   onLoadMore,
   onOpenSettings,
   onPush,
+  onPushedStatus,
   onRetry,
   onView,
   records,
@@ -5664,6 +5899,7 @@ function AdminTelegramPushPanel({
   onLoadMore: () => void;
   onOpenSettings: () => void;
   onPush: (record: TelegramPushRecord) => void;
+  onPushedStatus: () => void;
   onRetry: () => void;
   onView: (record: TelegramPushRecord) => void;
   records: TelegramPushRecord[];
@@ -5683,14 +5919,7 @@ function AdminTelegramPushPanel({
 
       {isLoading && records.length === 0 ? (
         <SkeletonVisibility visible={showSkeletons}>
-          <section className="admin-tool-grid" aria-label={text.title}>
-            {Array.from({ length: 8 }).map((_, index) => (
-              <TelegramPushRecordSkeleton
-                key={index}
-                viewLabel={text.viewAction}
-              />
-            ))}
-          </section>
+          <AdminResourceCardSkeletonGrid ariaLabel={text.title} />
         </SkeletonVisibility>
       ) : loadError && records.length === 0 ? (
         <AdminInitialLoadError message={loadError} onRetry={onRetry} t={t} />
@@ -5703,6 +5932,7 @@ function AdminTelegramPushPanel({
                 onDelete={() => onDelete(record)}
                 onEdit={() => onEdit(record)}
                 onPush={() => onPush(record)}
+                onPushedStatus={onPushedStatus}
                 onView={() => onView(record)}
                 record={record}
                 serviceEnabled={serviceEnabled}
@@ -5760,6 +5990,7 @@ function TelegramPushRecordCard({
   onDelete,
   onEdit,
   onPush,
+  onPushedStatus,
   onView,
   record,
   serviceEnabled,
@@ -5768,6 +5999,7 @@ function TelegramPushRecordCard({
   onDelete: () => void;
   onEdit: () => void;
   onPush: () => void;
+  onPushedStatus: () => void;
   onView: () => void;
   record: TelegramPushRecord;
   serviceEnabled: boolean;
@@ -5795,7 +6027,9 @@ function TelegramPushRecordCard({
                 ? text.typeTool
                 : record.resourceType === "article"
                   ? text.typeArticle
-                  : text.typeCustom}
+                  : record.resourceType === "content"
+                    ? text.typeContent
+                    : text.typeCustom}
             </span>
             {!record.resourceExists ? <span>{text.resourceDeleted}</span> : null}
           </div>
@@ -5803,15 +6037,20 @@ function TelegramPushRecordCard({
         <div className="admin-tool-card-actions" ref={actions.rootRef}>
           <button
             aria-label={pushed ? text.statusPushed : text.pushAction}
+            aria-pressed={pushed}
             className={`icon-button admin-article-publish-button ${
               pushed ? "is-active" : ""
             }`}
-            disabled={pushed || !serviceEnabled}
+            disabled={!pushed && !serviceEnabled}
             title={pushed ? text.statusPushed : text.pushAction}
             type="button"
             onClick={() => {
               actions.close();
-              onPush();
+              if (pushed) {
+                onPushedStatus();
+              } else {
+                onPush();
+              }
             }}
           >
             {pushed ? <CheckCircle2 size={16} /> : <Circle size={16} />}
@@ -5887,52 +6126,6 @@ function TelegramPushRecordCard({
   );
 }
 
-function TelegramPushRecordSkeleton({ viewLabel }: { viewLabel: string }) {
-  return (
-    <article
-      aria-hidden="true"
-      className="admin-tool-card admin-article-card admin-article-card-skeleton skeleton-layout-mask"
-    >
-      <div className="admin-tool-card-head">
-        <div className="admin-tool-title">
-          <div className="admin-tool-title-row">
-            <h2>Telegram push title placeholder</h2>
-          </div>
-          <div className="admin-tool-title-meta">
-            <span>2026-07-26</span>
-            <span>Resource</span>
-          </div>
-        </div>
-        <div className="admin-tool-card-actions">
-          <button className="icon-button" disabled type="button">
-            <Circle size={16} />
-          </button>
-          <button className="icon-button" disabled type="button">
-            <ChevronDown size={17} />
-          </button>
-        </div>
-      </div>
-      <p className="admin-tool-description">
-        Telegram message content preview follows the final record structure.
-      </p>
-      <div className="admin-tool-links">
-        <div className="admin-tool-link-row">
-          <button
-            className="admin-tool-link-text telegram-push-view-link"
-            disabled
-            type="button"
-          >
-            {viewLabel}
-          </button>
-        </div>
-      </div>
-      <div className="admin-tool-card-footer">
-        <CompactTagRow tags={["Telegram", "Push", "Record"]} />
-      </div>
-    </article>
-  );
-}
-
 function AdminContentFlowPanel({
   clearFiltersLabel,
   contentSourceCounts,
@@ -5957,9 +6150,12 @@ function AdminContentFlowPanel({
   onClearFilters,
   onSelectSource,
   onSyncSource,
+  onTelegram,
   proxySettings,
   showSkeletons,
   t,
+  telegramEnabled,
+  telegramText,
   visibleContentItems,
   writeLockedEntityKeys
 }: {
@@ -5986,9 +6182,12 @@ function AdminContentFlowPanel({
   onClearFilters: () => void;
   onSelectSource: (sourceId: string) => void;
   onSyncSource: (source: ContentSource) => void;
+  onTelegram: (item: ContentItemSummary) => void;
   proxySettings: ProxySettings;
   showSkeletons: boolean;
   t: Messages;
+  telegramEnabled: boolean;
+  telegramText: ReturnType<typeof getTelegramText>;
   visibleContentItems: ContentItemSummary[];
   writeLockedEntityKeys: Set<string>;
 }) {
@@ -6067,7 +6266,10 @@ function AdminContentFlowPanel({
                     item={item}
                     key={item.id}
                     onConvert={() => onConvertItem(item)}
+                    onTelegram={() => onTelegram(item)}
                     proxySettings={proxySettings}
+                    telegramEnabled={telegramEnabled}
+                    telegramText={telegramText}
                   />
                 ))}
               </div>
@@ -6181,13 +6383,19 @@ function ContentItemCard({
   isBusy,
   item,
   onConvert,
-  proxySettings
+  onTelegram,
+  proxySettings,
+  telegramEnabled,
+  telegramText
 }: {
   contentText: ReturnType<typeof getContentFlowText>;
   isBusy: boolean;
   item: ContentItemSummary;
   onConvert: () => void;
+  onTelegram: () => void;
   proxySettings: ProxySettings;
+  telegramEnabled: boolean;
+  telegramText: ReturnType<typeof getTelegramText>;
 }) {
   const actions = useAdminCardActionMenu(`content-item:${item.id}`);
   const Icon = getCategoryIcon(item.category);
@@ -6219,6 +6427,16 @@ function ContentItemCard({
           {displayDate ? <span>{displayDate}</span> : null}
         </div>
         <div className="admin-tool-card-actions" ref={actions.rootRef}>
+          {telegramEnabled ? (
+            <AdminTelegramPushButton
+              disabled={isBusy}
+              label={`${telegramText.action}: ${displayTitle}`}
+              onClick={() => {
+                actions.close();
+                onTelegram();
+              }}
+            />
+          ) : null}
           <button
             aria-label={`${item.articleId ? contentText.updateArticle : contentText.convert}: ${displayTitle}`}
             aria-pressed={Boolean(item.articleId)}
@@ -6371,6 +6589,7 @@ function AdminCategoryFilter({
   className = "",
   disabled = false,
   emptyLabel,
+  fixedCategories = [],
   labelFor,
   onChange,
   onDeleteCategory,
@@ -6386,6 +6605,7 @@ function AdminCategoryFilter({
   className?: string;
   disabled?: boolean;
   emptyLabel?: string;
+  fixedCategories?: string[];
   labelFor?: (category: string) => string;
   onChange: (category: string) => void;
   onDeleteCategory?: (category: string) => void;
@@ -6401,6 +6621,10 @@ function AdminCategoryFilter({
   const focusTargetRef = useRef<"first" | "last" | null>(null);
   const directTouchFocusUntilRef = useRef(0);
   const emptyText = categoryText.empty;
+  const normalizedFixedCategories = useMemo(
+    () => new Set(fixedCategories.map(normalizeAdminCategoryValue)),
+    [fixedCategories]
+  );
   const resolveLabel = useCallback(
     (category: string) => labelFor?.(category) ?? getCategoryLabel(category, t),
     [labelFor, t]
@@ -6643,7 +6867,8 @@ function AdminCategoryFilter({
           <span className="admin-category-filter-search">
             <input
               ref={searchRef}
-              aria-label={displaySelectedLabel}
+              aria-label={categoryText.inputPlaceholder}
+              placeholder={categoryText.inputPlaceholder}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -6663,15 +6888,6 @@ function AdminCategoryFilter({
                 }
               }}
             />
-            {!query ? (
-              <span
-                aria-hidden="true"
-                className="admin-category-filter-value admin-category-filter-placeholder"
-                title={selectedLabel}
-              >
-                {displaySelectedLabel}
-              </span>
-            ) : null}
           </span>
           <button
             className="admin-category-filter-arrow"
@@ -6748,7 +6964,8 @@ function AdminCategoryFilter({
               <>
                 {filteredCategories.map((category) => {
                   const selected = category === normalizedValue;
-                  const canDelete = Boolean(onDeleteCategory);
+                  const fixed = normalizedFixedCategories.has(category);
+                  const canDelete = Boolean(onDeleteCategory) && !fixed;
                   const categoryLabel = resolveLabel(category);
                   const displayCategoryLabel =
                     getAdminCategoryDisplayLabel(categoryLabel);
@@ -6757,6 +6974,7 @@ function AdminCategoryFilter({
                   );
                   const canMove =
                     Boolean(onMoveCategory) &&
+                    !fixed &&
                     !isFilteringCategories &&
                     isPersistableAdminCategory(category) &&
                     movableCategories.length > 1;
@@ -7242,79 +7460,46 @@ function AdminTelegramPushButton({
   );
 }
 
-function AdminToolCardSkeleton({
-  telegramEnabled
-}: {
-  telegramEnabled: boolean;
-}) {
+function AdminResourceCardSkeletonGrid({ ariaLabel }: { ariaLabel: string }) {
   return (
-    <article className="admin-tool-card admin-tool-card-skeleton skeleton-layout-mask" aria-hidden="true">
+    <section className="admin-tool-grid" aria-label={ariaLabel}>
+      {Array.from({ length: 8 }).map((_, index) => (
+        <AdminResourceCardSkeleton key={index} />
+      ))}
+    </section>
+  );
+}
+
+function AdminResourceCardSkeleton() {
+  return (
+    <article
+      aria-hidden="true"
+      className="admin-tool-card admin-resource-card-skeleton skeleton-layout-mask"
+    >
       <div className="admin-tool-card-head">
         <span className="admin-tool-avatar is-github"><Github size={25} /></span>
         <div className="admin-tool-title">
           <div className="admin-tool-title-row">
-            <h2>Tool name placeholder</h2>
+            <h2>Resource title placeholder</h2>
           </div>
           <div className="admin-tool-title-meta">
-            <span>2026-07-18</span>
+            <span>2026-08-04</span>
           </div>
         </div>
         <div className="admin-tool-card-actions">
-          {telegramEnabled ? (
-            <button className="icon-button" disabled type="button"><Send size={15} /></button>
-          ) : null}
+          <button className="icon-button" disabled type="button"><Send size={15} /></button>
           <button className="icon-button" disabled type="button"><Star size={16} /></button>
           <button className="icon-button" disabled type="button"><ChevronDown size={17} /></button>
         </div>
       </div>
-      <p className="admin-tool-description">Tool description placeholder follows the final card structure.</p>
+      <p className="admin-tool-description">Resource description placeholder follows the shared card structure.</p>
       <div className="admin-tool-links">
         <div className="admin-tool-link-row">
-          <a className="admin-tool-link-text" href="#">https://github.com/example/tool</a>
+          <span className="admin-tool-link-text">https://example.com/resource</span>
         </div>
       </div>
       <div className="admin-tool-card-footer">
-        <CompactTagRow tags={["Tool", "Open Source", "Web"]} />
-      </div>
-    </article>
-  );
-}
-
-function AdminArticleCardSkeleton({
-  telegramEnabled
-}: {
-  telegramEnabled: boolean;
-}) {
-  return (
-    <article
-      className="admin-tool-card admin-article-card admin-article-card-skeleton skeleton-layout-mask"
-      aria-hidden="true"
-    >
-      <div className="admin-tool-card-head">
-        <div className="admin-tool-title">
-          <div className="admin-tool-title-row">
-            <h2>Article title placeholder</h2>
-          </div>
-          <div className="admin-tool-title-meta">
-            <span>2026-07-18</span><span>Published</span>
-          </div>
-        </div>
-        <div className="admin-tool-card-actions">
-          {telegramEnabled ? (
-            <button className="icon-button" disabled type="button"><Send size={15} /></button>
-          ) : null}
-          <button className="icon-button" disabled type="button"><CheckCircle2 size={16} /></button>
-          <button className="icon-button" disabled type="button"><ChevronDown size={17} /></button>
-        </div>
-      </div>
-      <p className="admin-tool-description">Article summary placeholder follows the final card structure.</p>
-      <div className="admin-tool-links">
-        <div className="admin-tool-link-row">
-          <a className="admin-tool-link-text" href="#">/articles/article-placeholder</a>
-        </div>
-      </div>
-      <div className="admin-tool-card-footer">
-        <CompactTagRow tags={["Article", "Category", "Guide"]} />
+        <CompactTagRow tags={["Resource", "Category", "Tag"]} />
       </div>
     </article>
   );
@@ -7366,6 +7551,9 @@ function ContentFlowSkeleton({
                   <span>2026-07-18</span>
                 </div>
                 <div className="admin-tool-card-actions">
+                  <button className="icon-button" disabled type="button">
+                    <Send size={15} />
+                  </button>
                   <button className="icon-button" disabled type="button">
                     <Circle size={16} />
                   </button>
@@ -7977,6 +8165,8 @@ function TelegramSettingsCard({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [connection, setConnection] = useState<TelegramConnection | null>(null);
+  const preserveDraftRef = useRef<{ target: string; footerMarkdown: string } | null>(null);
+  const testRequestIdRef = useRef(0);
   const showSkeleton = useLoadingSkeleton(loading, 0);
   const dirty = target !== settings.target || footerMarkdown !== settings.footerMarkdown;
   const error = settingsError
@@ -7984,8 +8174,10 @@ function TelegramSettingsCard({
     : "";
 
   useEffect(() => {
-    setTarget(settings.target);
-    setFooterMarkdown(settings.footerMarkdown);
+    const preservedDraft = preserveDraftRef.current;
+    preserveDraftRef.current = null;
+    setTarget(preservedDraft?.target ?? settings.target);
+    setFooterMarkdown(preservedDraft?.footerMarkdown ?? settings.footerMarkdown);
     setConnection(null);
   }, [settings]);
 
@@ -8011,6 +8203,7 @@ function TelegramSettingsCard({
           : maintenanceText.telegramUpdated
       );
     } catch (saveError) {
+      preserveDraftRef.current = null;
       setStatus(getLocalizedErrorMessage(saveError, t));
     } finally {
       setSaving(false);
@@ -8018,22 +8211,31 @@ function TelegramSettingsCard({
   }
 
   async function testConnection() {
-    if (testing || !settings.available) return;
+    const testedTarget = target.trim();
+    if (testing || !testedTarget) return;
+    const requestId = testRequestIdRef.current + 1;
+    testRequestIdRef.current = requestId;
+    setConnection(null);
     setTesting(true);
     setStatus("");
     try {
-      const connection = await testTelegramSettings(token);
+      const connection = await testTelegramSettings(testedTarget, token);
+      if (testRequestIdRef.current !== requestId) return;
       setConnection(connection);
       setStatus(
         maintenanceText.telegramConnected(
           connection.chatTitle,
-          connection.botUsername
+          connection.botUsername,
+          testedTarget !== settings.target
         )
       );
     } catch (testError) {
+      if (testRequestIdRef.current !== requestId) return;
       setStatus(getLocalizedErrorMessage(testError, t));
     } finally {
-      setTesting(false);
+      if (testRequestIdRef.current === requestId) {
+        setTesting(false);
+      }
     }
   }
 
@@ -8088,13 +8290,28 @@ function TelegramSettingsCard({
             : maintenanceText.telegramUnavailable}
           enabled={settings.enabled}
           enabledLabel={maintenanceText.telegramEnabled}
-          onChange={(enabled) =>
+          onChange={(enabled) => {
+            if (enabled && dirty) {
+              setStatus(maintenanceText.telegramSaveBeforeEnable);
+              return;
+            }
+
+            if (!enabled && dirty) {
+              preserveDraftRef.current = { target, footerMarkdown };
+              void persist({
+                enabled: false,
+                target: settings.target,
+                footerMarkdown: settings.footerMarkdown
+              }, false);
+              return;
+            }
+
             void persist({
               enabled,
-              target: settings.target,
-              footerMarkdown: settings.footerMarkdown
-            }, false)
-          }
+              target,
+              footerMarkdown
+            }, false);
+          }}
         />
         <p id="telegram-settings-description">{maintenanceText.telegramDescription}</p>
         <div className="turnstile-config-help" id="telegram-settings-configuration">
@@ -8143,9 +8360,15 @@ function TelegramSettingsCard({
           {maintenanceText.telegramTargetLabel}
           <input
             autoComplete="off"
-            disabled={saving || testing}
+            disabled={saving}
             maxLength={40}
-            onChange={(event) => setTarget(event.target.value)}
+            onChange={(event) => {
+              testRequestIdRef.current += 1;
+              setTarget(event.target.value);
+              setConnection(null);
+              setTesting(false);
+              setStatus("");
+            }}
             placeholder={maintenanceText.telegramTargetPlaceholder}
             type="text"
             value={target}
@@ -8173,7 +8396,7 @@ function TelegramSettingsCard({
           </button>
           <button
             className="ghost-button"
-            disabled={saving || testing || !settings.available}
+            disabled={saving || testing || !target.trim()}
             type="button"
             onClick={() => void testConnection()}
           >
@@ -12293,23 +12516,31 @@ function Dialog({
   closeDisabled = false,
   closeLabel,
   closeRequestRef,
+  description,
   descriptionId,
   footer,
   panelClassName = "",
   title,
   onClose
 }: {
-  children: ReactNode;
+  children?: ReactNode;
   closeDisabled?: boolean;
   closeLabel: string;
   closeRequestRef?: { current: (() => void) | null };
+  description?: ReactNode;
   descriptionId?: string;
   footer?: ReactNode;
   panelClassName?: string;
   title: string;
   onClose: () => void;
 }) {
-  const titleId = descriptionId ? `${descriptionId}-title` : undefined;
+  const generatedDescriptionId = useId();
+  const resolvedDescriptionId = description
+    ? descriptionId ?? generatedDescriptionId
+    : undefined;
+  const titleId = resolvedDescriptionId
+    ? `${resolvedDescriptionId}-title`
+    : undefined;
   const panelRef = useRef<HTMLElement | null>(null);
   const dialogIdRef = useRef(Symbol("admin-dialog"));
   const returnFocusTargetRef = useRef<DialogReturnFocusTarget | undefined>(
@@ -12585,11 +12816,11 @@ function Dialog({
       onMouseDown={() => requestClose()}
     >
       <section
-        aria-describedby={descriptionId}
-        aria-label={descriptionId ? undefined : title}
+        aria-describedby={resolvedDescriptionId}
+        aria-label={resolvedDescriptionId ? undefined : title}
         aria-labelledby={titleId}
         ref={panelRef}
-        className={`dialog-panel ${panelClassName}`}
+        className={`dialog-panel ${footer ? "has-dialog-footer" : "is-dialog-body-only"} ${panelClassName}`}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
@@ -12615,7 +12846,16 @@ function Dialog({
           </button>
         </header>
         <DialogCloseContext.Provider value={requestClose}>
-          <div className="dialog-body">{children}</div>
+          <div
+            className={`dialog-body ${description ? "has-dialog-description" : ""}`.trim()}
+          >
+            {description ? (
+              <p className="dialog-description" id={resolvedDescriptionId}>
+                {description}
+              </p>
+            ) : null}
+            {children}
+          </div>
           {footer ? <footer className="dialog-footer">{footer}</footer> : null}
         </DialogCloseContext.Provider>
       </section>

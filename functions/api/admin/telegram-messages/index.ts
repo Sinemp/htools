@@ -12,7 +12,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const url = new URL(request.url);
     const typeValue = url.searchParams.get("type");
-    const resourceType = typeValue === "tool" || typeValue === "article" || typeValue === "custom"
+    const resourceType = typeValue === "tool" ||
+      typeValue === "article" ||
+      typeValue === "content" ||
+      typeValue === "custom"
       ? readTelegramResourceType(typeValue)
       : null;
     const limitParam = url.searchParams.get("limit");
@@ -25,6 +28,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
           : undefined,
         query: url.searchParams.get("q") ?? "",
         resourceType,
+        category: url.searchParams.get("category"),
         sort: url.searchParams.get("sort") === "oldest" ? "oldest" : "latest"
       })
     );

@@ -59,6 +59,8 @@ export const ADMIN_SYSTEM_SETTINGS_GROUP_PATHS: Record<
 };
 
 export const ADMIN_FEATURED_CATEGORY = "__admin_featured__";
+const TELEGRAM_PUSH_TOOL_CATEGORY = "__telegram_tool__";
+const TELEGRAM_PUSH_ARTICLE_CATEGORY = "__telegram_article__";
 export const ADMIN_ARTICLE_PAGE_SIZE = 50;
 export const CONTENT_ITEM_PAGE_SIZE = 50;
 export const DEFAULT_SOURCE_URL =
@@ -104,6 +106,7 @@ export const initialContentSourceForm: ContentSourceInput = {
 export const initialAdminCategorySettings: AdminCategorySettings = {
   tools: [],
   articles: [],
+  push: [],
   content: []
 };
 
@@ -237,7 +240,13 @@ export function isFeaturedCategoryValue(category: string) {
 
 export function isPersistableAdminCategory(category: string) {
   const normalized = normalizeAdminCategoryValue(category);
-  return Boolean(normalized && !isAllCategoryValue(normalized) && !isFeaturedCategoryValue(normalized));
+  return Boolean(
+    normalized &&
+    !isAllCategoryValue(normalized) &&
+    !isFeaturedCategoryValue(normalized) &&
+    normalized !== TELEGRAM_PUSH_TOOL_CATEGORY &&
+    normalized !== TELEGRAM_PUSH_ARTICLE_CATEGORY
+  );
 }
 
 function normalizeAdminCategoryList(categories: string[]) {

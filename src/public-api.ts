@@ -138,7 +138,7 @@ export async function loadPublicCategoryData(): Promise<PublicCategorySettingsRe
 }
 
 export async function loadProxySettings(
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<ProxySettings> {
   const data = await requestJsonWithTimeout<ProxySettingsResponse>(
     "/api/proxy-settings",
@@ -147,13 +147,18 @@ export async function loadProxySettings(
       headers: {
         Accept: "application/json"
       }
-    }
+    },
+    { timeoutMs: options.timeoutMs }
   );
   return data.settings;
 }
 
 export async function loadSiteConfiguration(
-  options: { includeFullContent?: boolean; signal?: AbortSignal } = {}
+  options: {
+    includeFullContent?: boolean;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {}
 ): Promise<PublicSiteConfiguration> {
   const path = options.includeFullContent === false
     ? "/api/site-settings?scope=basic"
@@ -166,7 +171,8 @@ export async function loadSiteConfiguration(
       headers: {
         Accept: "application/json"
       }
-    }
+    },
+    { timeoutMs: options.timeoutMs }
   );
   return {
     settings: data.settings,
@@ -175,7 +181,11 @@ export async function loadSiteConfiguration(
 }
 
 export async function loadSiteSettings(
-  options: { includeFullContent?: boolean; signal?: AbortSignal } = {}
+  options: {
+    includeFullContent?: boolean;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {}
 ): Promise<SiteSettings> {
   return (await loadSiteConfiguration(options)).settings;
 }

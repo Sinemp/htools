@@ -30,6 +30,7 @@ HTools is an open-source tool directory built on Cloudflare Pages Functions and 
 - The dashboard manages tools, articles, RSS sources, categories, and system settings.
 - RSS items can be previewed or converted into site articles; articles and the about page support Markdown.
 - Users can fetch GitHub repository metadata and continue to GitHub to create a public issue; admins can also auto-fill repository details.
+- Administrators can manually push tools, articles, content-feed items, and custom messages to Telegram, then browse, edit, and update those push records from one dashboard.
 - Full backup and restore, a public tool feed, and Simplified Chinese / English interfaces are included.
 
 ## Deployment

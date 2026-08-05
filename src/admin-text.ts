@@ -188,7 +188,9 @@ export function getAdminMaintenanceText(locale: Locale) {
       telegramUpdated: "Telegram 推送设置已保存。",
       telegramEnabledMessage: "Telegram 手动推送已开启。",
       telegramDisabledMessage: "Telegram 手动推送已关闭。",
-      telegramConnected: (title: string, bot: string) => `连接正常：${title}${bot ? `，机器人 @${bot}` : ""}。`,
+      telegramSaveBeforeEnable: "请先保存当前设置，再开启 Telegram 推送。",
+      telegramConnected: (title: string, bot: string, unsaved: boolean) =>
+        `连接正常：${title}${bot ? `，机器人 @${bot}` : ""}。${unsaved ? "当前目标尚未保存。" : ""}`,
       umamiTitle: "Umami 访问统计",
       umamiDescription: "连接自托管 Umami 或 Umami Cloud，统计站点访问情况；保存完整配置后可在这里开启或关闭。",
       umamiScriptUrlLabel: "统计脚本地址",
@@ -463,7 +465,9 @@ export function getAdminMaintenanceText(locale: Locale) {
     telegramUpdated: "Telegram push settings saved.",
     telegramEnabledMessage: "Telegram manual pushing enabled.",
     telegramDisabledMessage: "Telegram manual pushing disabled.",
-    telegramConnected: (title: string, bot: string) => `Connected to ${title}${bot ? ` with @${bot}` : ""}.`,
+    telegramSaveBeforeEnable: "Save the current settings before enabling Telegram push.",
+    telegramConnected: (title: string, bot: string, unsaved: boolean) =>
+      `Connected to ${title}${bot ? ` with @${bot}` : ""}.${unsaved ? " The current target has not been saved." : ""}`,
     umamiTitle: "Umami Analytics",
     umamiDescription: "Connect self-hosted Umami or Umami Cloud to measure site visits. Save a complete configuration here before enabling or disabling analytics.",
     umamiScriptUrlLabel: "Analytics script URL",
@@ -525,6 +529,7 @@ export function getAdminWorkspaceText(locale: Locale) {
     const scopeLabels: Record<AdminCategoryScope, string> = {
       tools: "\u5de5\u5177\u5e93",
       articles: "\u6587\u7ae0\u7ba1\u7406",
+      push: "\u6d88\u606f\u63a8\u9001",
       content: "\u5185\u5bb9\u6d41"
     };
 
@@ -532,6 +537,11 @@ export function getAdminWorkspaceText(locale: Locale) {
       articleLoadFailed: "\u65e0\u6cd5\u52a0\u8f7d\u6587\u7ae0\u3002",
       category: {
         topLabel: "\u65b0\u589e/\u7b5b\u9009\u5206\u7c7b",
+        toolLabel: "\u5de5\u5177\u5206\u7c7b",
+        articleLabel: "\u6587\u7ae0\u5206\u7c7b",
+        contentLabel: "\u5185\u5bb9\u5206\u7c7b",
+        pushLabel: "\u63a8\u9001\u5206\u7c7b",
+        inputPlaceholder: "\u8f93\u5165\u65b0\u589e\u5206\u7c7b",
         empty: "\u6ca1\u6709\u627e\u5230\u5206\u7c7b",
         createLabel: (category: string) => `\u65b0\u589e\u5206\u7c7b\uff1a${category}`,
         clearAllAction: "\u6e05\u7a7a\u5168\u90e8\u5185\u5bb9",
@@ -565,6 +575,7 @@ export function getAdminWorkspaceText(locale: Locale) {
   const scopeLabels: Record<AdminCategoryScope, string> = {
     tools: "Tools",
     articles: "Articles",
+    push: "Message Push",
     content: "Content Flow"
   };
 
@@ -572,6 +583,11 @@ export function getAdminWorkspaceText(locale: Locale) {
     articleLoadFailed: "Unable to load article.",
     category: {
       topLabel: "Create / Filter Category",
+      toolLabel: "Tool category",
+      articleLabel: "Article category",
+      contentLabel: "Content category",
+      pushLabel: "Push category",
+      inputPlaceholder: "Type to add category",
       empty: "No matching categories",
       createLabel: (category: string) => `Create category: ${category}`,
       clearAllAction: "Clear all content",
@@ -610,8 +626,10 @@ export function getContentFlowText(locale: Locale) {
       title: "内容流",
       description: "从 RSS 源同步外部内容，筛选后可转为站内文章。",
       addSource: "添加内容源",
+      addSourceDescription: "填写订阅地址、分类和默认标签，保存后将用于后续内容同步。",
       addContent: "添加内容",
       editSource: "编辑内容源",
+      editSourceDescription: "修改订阅地址、分类和默认标签，保存后将用于后续内容同步。",
       deleteSource: "删除内容源",
       syncSource: "同步",
       preview: "内容预览",
@@ -620,9 +638,9 @@ export function getContentFlowText(locale: Locale) {
       sourceTitlePlaceholder: "留空则使用订阅源标题",
       sourceUrlLabel: "RSS 源地址",
       sourceUrlPlaceholder: "https://blog.zrf.me/atom.xml",
-      categoryLabel: "分类",
-      categoryPlaceholder: "选择或新建分类",
-      categoryEmptyLabel: "选择分类",
+      categoryLabel: "内容源分类",
+      categoryPlaceholder: "选择或新建内容源分类",
+      categoryEmptyLabel: "选择内容源分类",
       categoryRequired: "请先选择内容源分类。",
       tagsLabel: "默认标签",
       tagsPlaceholder: "科技, 博客, 开源",
@@ -630,7 +648,7 @@ export function getContentFlowText(locale: Locale) {
       disabledLabel: "停用订阅",
       enabledDraftEnabled: "内容源状态已改为启用，请点击保存订阅生效。",
       enabledDraftDisabled: "内容源状态已改为停用，请点击保存订阅生效。",
-      searchPlaceholder: "搜索内容...",
+      searchPlaceholder: "搜索内容",
       sourceEmptyTitle: "还没有内容源",
       sourceEmptyDescription: "添加 RSS 源地址后，可以同步外部文章、视频或社交内容。",
       itemEmptyTitle: "还没有内容",
@@ -690,8 +708,12 @@ export function getContentFlowText(locale: Locale) {
     description:
       "Sync external RSS feeds, filter entries, and convert selected items into site articles.",
     addSource: "Add Source",
+    addSourceDescription:
+      "Enter the feed URL, category, and default tags for future content syncs.",
     addContent: "Add Content",
     editSource: "Edit Source",
+    editSourceDescription:
+      "Edit the feed URL, category, and default tags used by future content syncs.",
     deleteSource: "Delete Source",
     syncSource: "Sync",
     preview: "Preview Feed",
@@ -700,9 +722,9 @@ export function getContentFlowText(locale: Locale) {
     sourceTitlePlaceholder: "Leave blank to use the feed title",
     sourceUrlLabel: "RSS URL",
     sourceUrlPlaceholder: "https://blog.zrf.me/atom.xml",
-    categoryLabel: "Category",
-    categoryPlaceholder: "Select or create a category",
-    categoryEmptyLabel: "Select category",
+    categoryLabel: "Content source category",
+    categoryPlaceholder: "Select or create a content source category",
+    categoryEmptyLabel: "Select content source category",
     categoryRequired: "Select a content source category first.",
     tagsLabel: "Default tags",
     tagsPlaceholder: "Tech, Blog, Open Source",
@@ -710,7 +732,7 @@ export function getContentFlowText(locale: Locale) {
     disabledLabel: "Disable Feed",
     enabledDraftEnabled: "Feed status changed to enabled. Save the feed to apply it.",
     enabledDraftDisabled: "Feed status changed to disabled. Save the feed to apply it.",
-    searchPlaceholder: "Search content...",
+    searchPlaceholder: "Search content",
     sourceEmptyTitle: "No content sources yet",
     sourceEmptyDescription:
       "Add RSS URLs to sync external articles, videos, or social content.",

@@ -13,6 +13,7 @@ import {
   loadBrowserGitHubMetadata
 } from "./github-metadata";
 import type { Locale, Messages } from "./i18n";
+import { PublicGlowAction } from "./shared-ui";
 import {
   buildGitHubIssueUrl,
   checkSubmissionUrl,
@@ -396,14 +397,12 @@ export default function SubmitPage({
           <p>{t.submitPage.description}</p>
         </div>
         <div className="submit-page-auth-action">
-          <button
-            className="primary-button submit-button glow-button submit-github-metadata-button"
+          <PublicGlowAction
             disabled={isGitHubMetadataLoading}
-            type="button"
             onClick={() => void handleGitHubMetadata()}
           >
             {t.submitPage.githubMetadataAction}
-          </button>
+          </PublicGlowAction>
         </div>
       </section>
 
@@ -463,6 +462,7 @@ export default function SubmitPage({
                 <input
                   value={tagText}
                   onChange={(event) => setTagText(event.target.value)}
+                  onBlur={(event) => setTagText(parseTags(event.currentTarget.value).join(", "))}
                   placeholder={t.form.tagsPlaceholder}
                 />
               </FormRow>
@@ -552,6 +552,9 @@ function getGitHubMetadataErrorMessage(error: unknown, t: Messages) {
     }
     if (error.code === "GITHUB_RATE_LIMITED") {
       return t.submitPage.githubMetadataRateLimited;
+    }
+    if (error.code === "GITHUB_METADATA_TIMEOUT") {
+      return t.submitPage.githubMetadataTimeout;
     }
   }
   return t.submitPage.githubMetadataFailed;

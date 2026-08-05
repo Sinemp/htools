@@ -41,6 +41,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     if (message === "URL must be a GitHub repository.") {
       return badRequest(message);
     }
+    if (message === "GitHub metadata request timed out.") {
+      return json(
+        { error: message, code: "GITHUB_METADATA_TIMEOUT" },
+        { status: 504 }
+      );
+    }
 
     return json(
       { error: message },

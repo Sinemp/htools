@@ -74,6 +74,7 @@ import { useUtilityMenuKeyboard } from "./useUtilityMenuKeyboard";
 import { usePointerFocusRelease } from "./usePointerFocusRelease";
 import {
   CompactTagRow,
+  PublicGlowAction,
   SiteBrandIdentity,
   SiteSettingsContext,
   SkeletonLayoutMask,
@@ -1302,10 +1303,9 @@ function HomePage({
               <p>{homeHero.description}</p>
             </div>
             <div className="hero-actions">
-              <a className="primary-button glow-button" href="/tools">
+              <PublicGlowAction href="/tools">
                 {t.home.exploreAll}
-                <ArrowUpRight size={17} />
-              </a>
+              </PublicGlowAction>
               <a className="ghost-button hero-ghost" href="/submit">
                 {t.actions.submitTool}
               </a>
@@ -1346,7 +1346,7 @@ function HomePage({
                 </div>
                 <p>
                   {toolLoadError
-                    ? t.empty.connectionDescription
+                    ? toolLoadError
                     : totalToolCount === 0
                       ? t.empty.libraryDescription
                       : t.empty.description}
@@ -1364,10 +1364,9 @@ function HomePage({
             )}
           </div>
           <div className="section-action">
-            <a className="primary-button glow-button small-glow" href="/tools">
+            <PublicGlowAction href="/tools">
               {t.home.moreTools}
-              <ArrowUpRight size={15} />
-            </a>
+            </PublicGlowAction>
           </div>
         </section>
 
@@ -1400,17 +1399,16 @@ function HomePage({
                 </div>
                 <p>
                   {articleError
-                    ? t.empty.connectionDescription
+                    ? articleError
                     : articleText.publicEmptyDescription}
                 </p>
               </div>
             )}
           </div>
           <div className="section-action">
-            <a className="primary-button glow-button small-glow" href="/articles">
+            <PublicGlowAction href="/articles">
               {t.home.moreArticles}
-              <ArrowUpRight size={15} />
-            </a>
+            </PublicGlowAction>
           </div>
         </section>
       </main>
@@ -1491,9 +1489,9 @@ function CategoryPage({
             <h1>{t.nav.category}</h1>
             <p>{t.hero.description}</p>
           </div>
-          <a className="primary-button submit-button glow-button" href="/submit">
+          <PublicGlowAction href="/submit">
             {t.actions.submitTool}
-          </a>
+          </PublicGlowAction>
         </section>
 
         <section className="directory-layout category-directory" id="category">
@@ -1558,7 +1556,7 @@ function CategoryPage({
                   </div>
                   <p>
                     {toolLoadError
-                      ? t.empty.connectionDescription
+                      ? toolLoadError
                       : totalToolCount === 0
                         ? t.empty.libraryDescription
                         : t.empty.description}
@@ -1763,7 +1761,7 @@ function ArticlesPage({
                   </div>
                   <p>
                     {error
-                      ? t.empty.connectionDescription
+                      ? error
                       : totalArticleCount === 0
                         ? articleText.publicEmptyDescription
                         : articleText.noMatchDescription}

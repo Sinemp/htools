@@ -21,6 +21,42 @@ export class ApiRequestTimeoutError extends Error {
   }
 }
 
+export const TIMED_OUT_WRITE_CONFIRM_DELAY_MS = 400;
+export const TIMED_OUT_WRITE_CONFIRM_TIMEOUT_MS = 3_000;
+
+export async function confirmTimedOutWrite<T>({
+  confirm,
+  delayMs = TIMED_OUT_WRITE_CONFIRM_DELAY_MS,
+  matches,
+  write
+}: {
+  confirm: () => Promise<T>;
+  delayMs?: number;
+  matches: (value: T) => boolean;
+  write: () => Promise<T>;
+}): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    if (!(error instanceof ApiRequestTimeoutError)) throw error;
+
+    if (delayMs > 0) {
+      await new Promise<void>((resolve) => {
+        globalThis.setTimeout(resolve, delayMs);
+      });
+    }
+
+    try {
+      const current = await confirm();
+      if (matches(current)) return current;
+    } catch {
+      // Preserve the original timeout when the confirmation read also fails.
+    }
+
+    throw error;
+  }
+}
+
 export async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json().catch((error) => {
     if (error instanceof Error && error.name === "AbortError") {

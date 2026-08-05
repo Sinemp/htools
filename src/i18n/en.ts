@@ -1,4 +1,5 @@
 import type { Messages } from "./type";
+import { ADMIN_RESOURCE_FIELD_EXAMPLES } from "../admin-field-examples";
 
 export const en: Messages = {
   brand: "HTools",
@@ -77,7 +78,7 @@ export const en: Messages = {
   },
   search: {
     trigger: "Search",
-    placeholder: "Quick search..."
+    placeholder: "Quick search"
   },
   theme: {
     light: "Light",
@@ -136,6 +137,7 @@ export const en: Messages = {
     githubMetadataSuccess: "GitHub repository information loaded.",
     githubMetadataNotFound: "No public GitHub repository was found.",
     githubMetadataRateLimited: "The GitHub public API rate limit was reached. Try again later.",
+    githubMetadataTimeout: "GitHub metadata request timed out. Check your connection and try again.",
     githubMetadataFailed: "Unable to load GitHub repository information. Check the project URL.",
     submitHint: "You will continue to GitHub to review and create a public issue.",
     validationNameRequired: "Enter a tool name.",
@@ -184,7 +186,7 @@ export const en: Messages = {
     refresh: "Refresh",
     collapseSidebar: "Collapse sidebar",
     expandSidebar: "Expand sidebar",
-    searchPlaceholder: "Search tools...",
+    searchPlaceholder: "Search tools",
     manageTools: "Manage tools",
     sortLatest: "Latest first",
     sortOldest: "Oldest first",
@@ -256,16 +258,21 @@ export const en: Messages = {
     }
   },
   form: {
+    addDescription: "Enter the tool's public information, category, and display content, then save it to the library.",
+    editDescription: "Edit the tool's public information, category, and display content, then save the changes to the library.",
     name: "Name",
+    namePlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.en.name,
     url: "Project URL",
+    urlPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.en.url,
     demoUrl: "Demo site",
-    demoUrlPlaceholder: "Optional deployed demo URL",
+    demoUrlPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.en.demoUrl,
     image: "Preview image",
-    imagePlaceholder: "Leave empty to generate from project URL",
-    category: "Category",
+    imagePlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.en.image,
+    category: "Tool category",
     description: "Description",
+    descriptionPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.en.description,
     tags: "Tags",
-    tagsPlaceholder: "Database, Auth, AI",
+    tagsPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.en.tags,
     githubMetadata: "GitHub Info",
     featuredTool: "Featured tool",
     regularTool: "Regular tool",

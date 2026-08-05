@@ -175,7 +175,7 @@ export type ContentSyncResponse = {
   nextOffset: number | null;
 };
 
-export type AdminCategoryScope = "tools" | "articles" | "content";
+export type AdminCategoryScope = "tools" | "articles" | "push" | "content";
 
 export type AdminCategorySettings = Record<AdminCategoryScope, string[]>;
 
@@ -274,9 +274,11 @@ export type TelegramMessage = {
   mediaUrl: string;
   defaultBodyMarkdown: string;
   defaultMediaUrl: string;
+  resource: TelegramPushResource;
+  resourceExists: boolean;
 };
 
-export type TelegramResourceType = "tool" | "article" | "custom";
+export type TelegramResourceType = "tool" | "article" | "content" | "custom";
 
 export type TelegramPushResource = {
   type: TelegramResourceType;
@@ -286,6 +288,7 @@ export type TelegramPushResource = {
   url: string;
   demoUrl: string;
   image: string;
+  category: string;
   tags: string[];
 };
 
@@ -306,9 +309,16 @@ export type TelegramPushRecord = {
 
 export type TelegramPushPage = {
   records: TelegramPushRecord[];
+  categoryOptions: string[];
   limit: number;
   hasMore: boolean;
   nextCursor: string | null;
+};
+
+export type TelegramSourceState = {
+  resource: TelegramPushResource;
+  bodyMarkdown: string;
+  mediaUrl: string;
 };
 
 export type HomeHeroContent = {

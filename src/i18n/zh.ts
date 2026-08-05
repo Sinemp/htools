@@ -1,4 +1,5 @@
 import type { Messages } from "./type";
+import { ADMIN_RESOURCE_FIELD_EXAMPLES } from "../admin-field-examples";
 
 export const zh: Messages = {
   brand: "HTools",
@@ -71,7 +72,7 @@ export const zh: Messages = {
   },
   search: {
     trigger: "搜索",
-    placeholder: "快速搜索..."
+    placeholder: "快速搜索"
   },
   theme: {
     light: "浅色",
@@ -129,6 +130,7 @@ export const zh: Messages = {
     githubMetadataSuccess: "已读取 GitHub 仓库信息。",
     githubMetadataNotFound: "未找到公开的 GitHub 仓库。",
     githubMetadataRateLimited: "GitHub 公开接口请求次数已达上限，请稍后重试。",
+    githubMetadataTimeout: "GitHub 信息读取超时，请检查网络后重试。",
     githubMetadataFailed: "GitHub 仓库信息读取失败，请检查项目地址。",
     submitHint: "提交后将前往 GitHub，由你确认并创建公开 Issue。",
     validationNameRequired: "请输入工具名称。",
@@ -176,7 +178,7 @@ export const zh: Messages = {
     refresh: "刷新",
     collapseSidebar: "收起侧边栏",
     expandSidebar: "展开侧边栏",
-    searchPlaceholder: "搜索工具...",
+    searchPlaceholder: "搜索工具",
     manageTools: "管理工具",
     sortLatest: "由新到旧",
     sortOldest: "由旧到新",
@@ -245,16 +247,21 @@ export const zh: Messages = {
     }
   },
   form: {
+    addDescription: "填写工具的公开信息、分类和展示内容，保存后将添加到工具库。",
+    editDescription: "修改工具的公开信息、分类和展示内容，保存后将更新工具库。",
     name: "名称",
+    namePlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.zh.name,
     url: "项目地址",
+    urlPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.zh.url,
     demoUrl: "演示站点",
-    demoUrlPlaceholder: "可选，填写部署后的演示地址",
+    demoUrlPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.zh.demoUrl,
     image: "预览图",
-    imagePlaceholder: "留空则根据项目地址自动生成",
-    category: "分类",
+    imagePlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.zh.image,
+    category: "工具分类",
     description: "简介",
+    descriptionPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.zh.description,
     tags: "标签",
-    tagsPlaceholder: "数据库, 认证, AI",
+    tagsPlaceholder: ADMIN_RESOURCE_FIELD_EXAMPLES.zh.tags,
     githubMetadata: "GitHub 信息",
     featuredTool: "精选工具",
     regularTool: "普通工具",
